@@ -1,0 +1,634 @@
+---
+title: "Randomisierte Evaluation: Telemonitoring bei Herzinsuffizienz"
+subtitle: "Cluster-RCT mit simulierten Versichertendaten"
+author: "SK"
+lang: de
+format:
+  html:
+    theme: cosmo
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    code-fold: false
+  # pdf:
+  #   pdf-engine: xelatex
+  #   toc: true
+  #   toc-depth: 3
+  #   number-sections: true
+execute:
+  echo: true
+  warning: false
+  message: false
+  error: false
+---
+
+# Lernziele
+Nach diesem Modul kannst du:
+1.  die Randomisierung und die Datenkonsistenz überprüfen;
+2.  Krankenhausaufnahmen als **Ereignisrate pro Personenjahr** analysieren;
+3.  den **Intention-to-treat-Effekt (ITT)** mit einer Poisson-Regression schätzen;
+4.  die statistische Abhängigkeit innerhalb von Praxen berücksichtigen;
+5.  Modellannahmen mit einfachen Sensitivitätsanalysen prüfen.
+
+
+# Studiendesign und statistischer Zielparameter
+
+## Forschungsfrage und Studiendesign
+
+**Forschungsfrage:** Senkt das Angebot eines telemedizinischen Betreuungsprogramms die Rate herzinsuffizienzbedingter Krankenhausaufnahmen innerhalb eines Jahres (Herzinsuffizienz=heart failure/ HF)?
+
+Wir untersuchen ein **stratifiziertes, parallelgruppiges Cluster-RCT** mit 48 Arztpraxen und 2.000 Versicherten. Innerhalb von vier Regionen wurden jeweils sechs Praxen der Intervention und sechs der Regelversorgung zugelost. Nicht die einzelne Person, sondern die **Praxis** wurde randomisiert.
+
+**Datenhinweis:** Personen, Praxen, Behandlungen, Kosten und Ergebnisse sind vollständig **synthetisch**. Die Analysen sind methodische Übungen und keine Evidenz zur Wirksamkeit eines realen Versorgungsprogramms.
+
+| Bestandteil | Definition |
+|:----------------------------|:------------------------------------------|
+| Randomisierungseinheit | Arztpraxis |
+| Studienarme | Telemonitoring-Angebot und Regelversorgung |
+| Beobachtung | Bis zu 365 Tage je Person |
+| Primärer Endpunkt (outcome) | Zahl der HF-Aufnahmen pro beobachtetem Personenjahr |
+| Haupteffekt | Ratenverhältnis nach randomisierter Zuteilung (ITT) |
+| Weitere Endpunkte | Mortalität, Tage lebend außerhalb des Krankenhauses (DAOH = Days Alive and Out of Hospital) |
+
+Eine Person kann mehrfach hospitalisiert werden. Wir untersuchen deshalb eine **Ereigniszahl/Rate**, nicht nur den Indikator „mindestens eine Aufnahme“.
+
+Verstirbt eine Person im Beobachtungszeitraum, kann sie anschließend keine weiteren Hospitalisierungen erleben. Deshalb betrachten wir die Krankenhausaufnahmerate **während der beobachteten Lebenszeit**, analysieren **Mortalität separat** und ergänzen den patientenrelevanten Endpunkt **Tage lebend außerhalb des Krankenhauses** (*days alive and out of hospital*, DAOH).
+
+**Achtung:** Ein Vergleich von Aufnahmeraten unter Lebenden reicht für sich allein nicht aus, um eine umfassende klinische Überlegenheit nachzuweisen. Weniger Aufnahmen könnten im Extremfall auch auf früheren Tod zurückgehen.
+
+**Warum Cluster-Randomisierung bzw. warum Praxen randomisieren?** Wenn alle Patienten derselben Praxis derselben Strategie zugeteilt werden, kann eine Praxis ihre Prozesse einheitlich umsetzen. Dies reduziert organisatorische Kontamination. Der Nachteil: Ergebnisse von Patienten derselben Praxis sind statistisch nicht unabhängig.
+
+
+## Was schätzt eine ITT-Analyse?
+
+Wir vergleichen alle Versicherten nach der **Zuteilung ihrer Praxis** – unabhängig davon, ob sie das Programm tatsächlich genutzt haben. Das ist der Effekt des *Programmangebots*, nicht der Effekt einer perfekten Nutzung.
+
+**ITT = Intention-to-Treat-Analyse.** Alle Studienteilnehmenden werden genau in der Gruppe ausgewertet, der sie zu Beginn zufällig zugeteilt (randomisiert) wurden. Dies gilt auch dann, wenn sie die Therapie abbrechen, wechseln oder sich nicht an den Studienplan halten. Beispielsweise brechen besonders schwer erkrankte Personen eine Therapie ab, weil sie diese schlecht vertragen oder weil sie nicht ausreichend wirkt. Würden wir diese Personen aus der Analyse entfernen - dh. nur Personen vergleichen, die das Studienprotokoll ausreichend eingehalten haben (**Per-Protocol = PP**), blieben möglicherweise überproportional viele Personen übrig, bei denen die Therapie gut funktioniert. Wir würden dann nicht mehr zwei ursprünglich vergleichbare, randomisierte Gruppen vergleichen, sondern selektiv zusammengesetzte Gruppen. Innerhalb derselben RCT können verschiedene Analyseansätze verwendet werden. Sie beantworten allerdings unterschiedliche kausale Fragen. Drei wichtige Ansätze sind:
+
+| Analyseansatz | Was wird verglichen? | Zentrale Frage |
+|------------------------|------------------------|------------------------|
+| **Intention-to-Treat (ITT)** | Alle Personen nach ursprünglicher Zuteilung | Was bewirkt die Zuteilung zur Intervention? |
+| **Per-Protocol (PP)** | Personen, die das Studienprotokoll ausreichend eingehalten haben | Wie wirkt die Intervention bei protokollgerechter Durchführung? |
+| **As-Treated (AT)** | Personen nach tatsächlich erhaltener Behandlung | Welche Unterschiede zeigen sich je nach tatsächlicher Behandlung? |
+
+Der primäre Zielparameter ist das **Incidence Rate Ratio (IRR)**. Dies ist das statistische Maß, das die Ereignisrate (hier: Hospitalisierungen pro Personenzeit, z. B. pro 100 Patientenjahre) in der Interventionsgruppe durch die Ereignisrate in der Kontrollgruppe teilt.
+
+$$
+IRR = \frac{\text{HF-Aufnahmen pro Personenjahr in Interventionspraxen}}{\text{HF-Aufnahmen pro Personenjahr in Kontrollpraxen}}.
+$$
+
+Ein IRR von 0,80 bedeutet eine um 20 % niedrigere Aufnahmerate im Interventionsarm. Im adjustierten Modell gilt dieser Vergleich **bei gleichen berücksichtigten Ausgangsmerkmalen**. Die Nullhypothese lautet $IRR=1$, d.h. es gibt keinen Unterschied in den HF-Hospitalisierungen zwischen Interventions- und Kontrollgruppe.
+
+## Warum Beobachtungszeit und Praxiszugehörigkeit wichtig sind
+
+Eine Person kann mehrfach aufgenommen werden. Außerdem werden Personen, die vor Ablauf des Jahres versterben, nur bis zum Tod beobachtet. Deshalb verwenden wir die Anzahl der Aufnahmen und die **tatsächlich beobachtete Zeit**.
+
+Die Hauptanalyse korrigiert die statistische Unsicherheit für die Abhängigkeit von Personen innerhalb derselben Praxis. Zusätzlich berücksichtigen wir die **Region**, nach der randomisiert wurde.
+
+**Grenze des Endpunkts:** Wenn Personen früher versterben, haben sie weniger Zeit für eine Krankenhausaufnahme. Deshalb betrachten wir Mortalität und DAOH separat. Die Aufnahmerate allein erlaubt keine abschließende Beurteilung des gesundheitlichen Nutzens.
+
+# Pakete und Daten
+
+## R-Pakete
+
+Installiere die Pakete bei Bedarf einmalig in der R-Konsole:
+
+```{r}
+# install.packages(c("dplyr", "ggplot2", "knitr", "fixest", "modelsummary"))
+```
+
+```{r}
+#| label: pakete
+
+library(dplyr)
+library(ggplot2)
+library(knitr)
+library(modelsummary)
+library(fixest)
+```
+
+`dplyr` hilft beim Zusammenfassen der Daten, `ggplot2` zeichnet Grafiken, `knitr` erstellt Tabellen und `fixest` berechnet robuste Standardfehler.
+
+## Dateien einlesen
+
+Dieses Skript liegt in `analysis/01-randomized-evaluation/`. Die drei CSV-Dateien liegen im gemeinsamen Ordner `data/` des Projekts. Deshalb beginnt ihr relativer Pfad mit `../../data/`.
+
+```{r}
+#| label: daten-laden
+
+
+praxen <- read.csv("../../data/praxen.csv")
+personen <- read.csv("../../data/versicherte.csv")
+aufnahmen <- read.csv("../../data/hf_aufnahmen.csv")
+
+# String-Variablen in Faktorvariablen umwandeln
+praxen$region <- factor(praxen$region)
+personen$region <- factor(personen$region)
+personen$nyha <- factor(personen$nyha, levels = c("II", "III", "IV"))
+
+personen$beobachtungsjahre <- personen$beobachtungstage / 365
+
+
+# Numerische Variablen in Faktorvariablen umwandeln und value labels ergänzen
+praxen$gruppe <- factor(praxen$intervention, levels = c(0, 1),
+                        labels = c("Regelversorgung", "Telemonitoring"))
+
+personen$gruppe <- factor(personen$intervention, levels = c(0, 1),
+                          labels = c("Regelversorgung", "Telemonitoring"))
+
+# Tabelle erstellen: Übersicht Daten
+kable(data.frame(
+  Datei = c("praxen.csv", "versicherte.csv", "hf_aufnahmen.csv"),
+  Zeilen = c(nrow(praxen), nrow(personen), nrow(aufnahmen)),
+  Beobachtungseinheit = c("Praxis", "Person", "Krankenhausaufnahme")
+), caption = "Die drei synthetischen Datenquellen")
+
+```
+
+Eine Person erscheint einmal in `versicherte.csv`, aber bei mehreren Krankenhausaufnahmen mehrfach in `hf_aufnahmen.csv`.
+
+Die wichtigsten Variablen sind:
+
+| Variable | Bedeutung |
+|:-----------------------------------|:-----------------------------------|
+| `intervention` | Zuteilung der Praxis: 0 = Kontrolle, 1 = Telemonitoring |
+| `hf_hosp_12m` | Anzahl HF-Aufnahmen im Beobachtungsjahr |
+| `hf_hosp_2026` | HF-Aufnahmen im Jahr vor der Intervention |
+| `beobachtungstage` | Beobachtete Tage bis zum Studienende oder Tod |
+| `tod_12m` | Tod innerhalb eines Jahres (0/1) |
+| `praxis_id` | Kennung der randomisierten Arztpraxis |
+| `nyha` | Schweregrad einer Herzinsuffizienz |
+
+## Datenkonsistenz überprüfen
+
+Bevor wir ein Modell schätzen, prüfen wir Schlüssel, Wertebereiche und die Übereinstimmung der Ereignistabellen. `stopifnot()` hält die Ausführung an, sobald eine Bedingung nicht erfüllt ist.
+
+```{r}
+#| label: daten-pruefen
+
+stopifnot(nrow(praxen) == 48)
+stopifnot(nrow(personen) == 2000)
+
+stopifnot(!anyDuplicated(praxen$praxis_id))
+stopifnot(!anyDuplicated(personen$person_id))
+
+stopifnot(all(personen$intervention %in% c(0, 1)))
+stopifnot(all(personen$beobachtungsjahre > 0))
+stopifnot(all(personen$beobachtungsjahre <= 1))
+stopifnot(all(personen$hf_hosp_12m >= 0))
+
+# Jeder Person muss eine vorhandene Praxis zugeordnet sein. 
+# Für jede Beobachtung im Datensatz Personen wird geprüft, ob ihre praxis_id im Datensatz praxen vorkommt.
+stopifnot(all(personen$praxis_id %in% praxen$praxis_id))
+
+# Wir mergen Variablen aus den Datensätzen personen und praxen und erstellen einen neuen Datensatz
+zuordnung <- personen %>%
+  select(person_id, praxis_id, intervention) %>%
+  left_join(praxen %>% select(praxis_id, intervention),
+            by = "praxis_id", suffix = c("_person", "_praxis"))
+
+# prüfen, dass die Variable intervention aus beiden Datensätzen identisch ist
+stopifnot(all(zuordnung$intervention_person ==
+              zuordnung$intervention_praxis))
+
+# Krankenhausaufnahmen in beiden Dateien abgleichen.
+ereignisse_pro_person <- aufnahmen %>%
+  count(person_id, name = "gezaehlte_aufnahmen")
+
+# Wir mergen und ersetzen fehlende Werte durch 0
+pruefung <- personen %>%
+  left_join(ereignisse_pro_person, by = "person_id") %>%
+  mutate(gezaehlte_aufnahmen = if_else(is.na(gezaehlte_aufnahmen), 0L, gezaehlte_aufnahmen))
+
+stopifnot(all(pruefung$hf_hosp_12m == pruefung$gezaehlte_aufnahmen))
+
+# --> Alle Datenprüfungen bestanden.
+```
+
+# Randomisierung und Ausgangsmerkmale
+
+## Wurden in jeder Region gleich viele Praxen zugeteilt?
+
+```{r}
+#| label: randomisierung-pruefen
+
+praxen_pro_arm <- praxen %>%
+  group_by(region, gruppe) %>%
+  summarise(anzahl_praxen = n(), .groups = "drop")
+
+kable(praxen_pro_arm,
+      caption = "Randomisierte Praxen nach Region und Studienarm")
+```
+
+In jeder Region sollten **sechs Praxen pro Arm** erscheinen. Die Zahl der *Versicherten* muss dagegen nicht gleich sein, da Praxen unterschiedlich groß sind.
+
+## Studienpopulation und Umsetzung
+
+```{r}
+#| label: teilnahme-deskriptiv
+studienfluss <- personen %>%
+  group_by(intervention) %>%
+  summarise(
+    patienten = n(),
+    praxen = n_distinct(praxis_id),
+    programm_tatsaechlich_genutzt = sum(programm_genutzt),
+    prozent_mit_programmnutzung = 100 * mean(programm_genutzt),
+    todesfaelle = sum(tod_12m),
+    .groups = "drop"
+  )
+
+knitr::kable(studienfluss, digits = 1,
+  caption = "Randomisierte Studiengruppen und tatsächliche Programmnutzung")
+```
+
+**Interpretation:** Nicht alle Versicherten der Interventionspraxen nutzen das Programm. Trotzdem verbleiben sie in der **ITT-Interventionsgruppe**. Wer nach Randomisierung nicht teilnimmt, darf nicht einfach entfernt oder in die Kontrollgruppe verschoben werden.
+
+## Sind die Ausgangsmerkmale ähnlich in den Gruppen und Regionen?
+
+```{r}
+#| label: baseline
+
+baseline <- personen %>%
+  group_by(gruppe, region) %>%
+  summarise(
+    personen = n(),
+    mittleres_alter = mean(alter),
+    frauen_prozent = 100 * mean(geschlecht == "w"),
+    nyha_iii_iv_prozent = 100 * mean(nyha %in% c("III", "IV")),
+    diabetes_prozent = 100 * mean(diabetes),
+    hf_hosp_12m_im_vorjahr = mean(hf_hosp_2026),
+    .groups = "drop"
+  )
+
+kable(baseline, digits = 2,
+      caption = "Vor der Intervention gemessene Patientenmerkmale")
+```
+
+**Interpretation:** Auch bei korrekter Randomisierung können die Gruppen zufällig unterschiedlich aussehen. Signifikanztests der Baseline-Werte sind kein Nachweis für eine erfolgreiche Randomisierung. Wichtiger sind das tatsächliche Zuteilungsverfahren und die Dokumentation der Stichprobe.
+
+**Wichtiger Kontrollpunkt:** Die Baseline-Variablen müssen **vor** Zuteilung bzw. Intervention gemessen worden sein. Variablen wie `programm_genutzt` sind **postrandomisiert** und gehören nicht als Confounder in das primäre ITT-Modell.
+
+
+# Deskriptiver Ergebnisvergleich
+
+## Berechnung von Hospitalisierungsraten und weiterer Endpunkte
+
+Die Rate pro 100 beobachtungsjahre berechnet sich als
+
+$$
+100\times\frac{\text{Gesamtzahl der HF-Aufnahmen}}{\text{Summe der Beobachtungsjahre}}.
+$$
+Wir dividieren **nicht** die Gesamtzahl der Aufnahmen einfach durch die Zahl aller Personen, wenn manche Versicherte durch Tod weniger als ein Jahr unter Beobachtung stehen.
+
+**Was bedeutet das noch nicht?** Die Tabelle ist ein deskriptiver Vergleich. Sie berücksichtigt weder die Cluster-Abhängigkeit noch die zufällig unterschiedlichen Baseline-Merkmale.
+
+```{r}
+#| label: gruppenvergleich
+
+ergebnis_uebersicht <- personen %>%
+  group_by(gruppe) %>%
+  summarise(
+    personen = n(),
+    beobachtungsjahre_summe = sum(beobachtungsjahre),
+    hf_hosp_12m_summe = sum(hf_hosp_12m),
+    hosp_rate_je_100pj = 100 * hf_hosp_12m_summe / beobachtungsjahre_summe,
+    anteil_mit_aufnahme = 100 * mean(hf_hosp_12m > 0),
+    mortalitaet_prozent = 100 * mean(tod_12m),
+    daoh_tage = mean(tage_lebend_ausserhalb_klinik),
+    .groups = "drop"
+  )
+
+kable(ergebnis_uebersicht, digits = 2,
+      caption = "Unadjustierter Vergleich der randomisierten Studienarme")
+```
+
+**Was zeigt die Tabelle?** Sie beschreibt Häufigkeiten und Mittelwerte. Für eine statistische Aussage müssen wir die Abhängigkeit innerhalb von Praxen berücksichtigen.
+
+## Hospitalisierungsraten auf Praxisebene
+
+```{r}
+#| label: Hospitalisierungsraten
+
+praxis_ergebnisse <- personen %>%
+  group_by(praxis_id, region, gruppe, intervention) %>%
+  summarise(
+    personen = n(),
+    beobachtungsjahre_summe = sum(beobachtungsjahre),
+    hf_hosp_12m_summe = sum(hf_hosp_12m),
+    hosp_rate_je_100pj = 100 * hf_hosp_12m_summe / beobachtungsjahre_summe,
+    .groups = "drop"
+  )
+
+ggplot(praxis_ergebnisse,
+       aes(x = gruppe, y = hosp_rate_je_100pj)) +
+  geom_jitter(width = 0.12, height = 0, alpha = 0.7) +
+  facet_wrap(~ region) +
+  labs(
+    title = "HF-Hospitalisierungsraten der einzelnen Praxen",
+    x = "Randomisierte Gruppe",
+    y = "Aufnahmen pro 100 beobachtungsjahre"
+  ) +
+  theme_minimal()
+```
+
+Jeder Punkt steht für eine Praxis. Die Streuung zeigt die Heterogenität zwischen Praxen und macht deutlich, weshalb 2.000 Versicherte **nicht** wie 2.000 unabhängig randomisierte Einheiten behandelt werden dürfen. Sie misst noch nicht die Intracluster-Korrelation. Dafür benötigen wir die Variation der individuellen Outcomes innerhalb UND zwischen den Praxen. Die methodische Konsequenz ist, dass wir prüfen müssen, wie stark die Outcomes innerhalb der Praxen korrelieren.
+
+
+
+
+
+# Poisson-Regressionsanalyse
+
+## Warum Poisson und Offset?
+
+Unser primärer Endpunkt ist eine **Anzahl wiederholter Ereignisse** pro Beobachtungszeit. Für Person $i$ in Praxis $j$ modellieren wir:
+
+$$
+Y_{ij}\sim\operatorname{Poisson}(\mu_{ij}),
+$$
+
+$$
+\log(\mu_{ij})=
+\log(T_{ij})+\beta_0+\beta_1 Z_j+
+\boldsymbol\gamma^\top\mathbf X_{ij}+\boldsymbol\delta^\top\mathbf R_j.
+$$
+
+Dabei ist:
+
+- $Y_{ij}$: Zahl der HF-Hospitalisierungen innerhalb des Beobachtungszeitraums.
+- $T_{ij}$: beobachtete Zeit in Jahren, bei frühem Tod entsprechend kürzer.
+- $Z_j$: **randomisierte Praxiszuteilung** (0 = Kontrolle; 1 = Telemonitoring).
+- $\mathbf X_{ij}$: **vor Interventionsbeginn gemessene** Kovariaten.
+- $\mathbf R_j$: Region als Randomisierungsstratum.
+
+Der Offset $\log(T_{ij})$ bewirkt, dass wir **Ereignisraten statt bloßer Ereigniszahlen** vergleichen.
+
+Der zentrale Modellparameter ist:
+
+$$
+IRR_{\mathrm{ITT}}=e^{\beta_1}.
+$$
+
+Beispielsweise bedeutet $IRR=0{,}80$: Im Interventionsarm liegt die geschätzte HF-Aufnahmerate je beobachtetem Personenjahr um ungefähr **20 % niedriger**.
+
+
+## Schätzung und Interpretation
+
+$$
+\log(E[Y_i]) = \log(T_i) + \beta_0 + \beta_1 Z_i + \text{Baseline-Merkmale und Region}.
+$$
+
+Hier bezeichnet $Y_i$ die Aufnahmezahl, $T_i$ die Beobachtungszeit in Jahren und $Z_i$ die randomisierte Praxiszuteilung. Das geschätzte **Ratenverhältnis** ist $\exp(\beta_1)$.
+
+Im Minimalmodell berücksichtigen wir die Randomisierungsregion. Im erweiterten Modell nehmen wir zusätzlich **vor der Intervention gemessene** Risikomerkmale auf, um die Präzision zu verbessern.
+
+**Interpretationshilfe:**
+
+1. **IRR unter 1:** In den randomisierten Interventionspraxen ist die Aufnahmerate geringer.
+2. **IRR gleich 1:** Keine geschätzte relative Veränderung.
+3. **IRR über 1:** Höhere Aufnahmerate unter der Intervention.
+4. **95-%-Konfidenzintervall:** Enthält es 1, ist der Effekt beim 5-%-Niveau mit dieser Auswertung nicht statistisch eindeutig belegt. Dies beweist keine Wirkungslosigkeit.
+
+Die Kovariatenanpassung dient in einem RCT insbesondere der **Präzisionssteigerung**. Sie ersetzt nicht die Randomisierung und darf nicht mit postrandomisierten Variablen erfolgen.
+
+Wir schätzen unser Poisson-Modell erst ohne und anschließend mit Clusterkorrektur.
+
+```{r}
+#| label: poisson-modelle
+
+modell_poisson_basis <- glm(hf_hosp_12m ~ intervention + region +
+                offset(log(beobachtungsjahre)),
+                family = poisson(link = "log"), data = personen)
+#summary(modell_poisson_basis)
+
+# Bei einer Poisson-Regression mit Log-Link muss der Koeffizient exponentiert werden, um ihn unmittelbar interpretieren zu können.
+#exp(-0.28367) # 0.7530151
+
+
+
+modell_poisson_adjustiert <- glm(hf_hosp_12m ~ intervention + region +
+                alter + nyha + diabetes + niereninsuffizienz + hf_hosp_2026 +
+                offset(log(beobachtungsjahre)),
+                family = poisson(link = "log"), data = personen)
+#summary(modell_poisson_adjustiert)
+#exp(-0.279003) # = 0.7565376
+
+
+
+# Modellvergleich: mit exponierten Koeffizienten
+modellvergleich_std_err <- modelsummary(list("Basismodell" = modell_poisson_basis, 
+                                     "Adjustiertes Modell" = modell_poisson_adjustiert),
+                                      exponentiate = TRUE, estimate = "{estimate}", 
+                                      statistic = "({std.error})", stars = TRUE, 
+                                      output = "tinytable")     
+# statistic = "[{conf.low}, {conf.high}]"
+modellvergleich_std_err
+
+modellvergleich_conf <- modelsummary(list("Basismodell" = modell_poisson_basis, 
+                                          "Adjustiertes Modell" = modell_poisson_adjustiert),
+                                          exponentiate = TRUE, estimate = "{estimate}", 
+                                          statistic = "[{conf.low}, {conf.high}]", stars = TRUE, 
+                                          output = "tinytable")
+modellvergleich_conf
+
+```
+
+`offset(log(beobachtungsjahre))` sorgt dafür, dass die Modelle **Raten** vergleichen. Es ist keine zusätzliche zu schätzende Kovariate.
+
+Die relative Veränderung im Basis Modell beträgt:
+```{r}
+irr <- exp(coef(modell_poisson_basis)["intervention"])
+veraenderung_prozent <- 100 * (irr - 1)       # in %
+round(veraenderung_prozent, 1)
+```
+
+Die erwartete Rate an HF-bedingten Krankenhausaufnahmen ist in der Telemonitoring/Interventionsgruppe um etwa 24,7 % niedriger als in der Regelversorgungsgruppe, bei gleicher Region.
+
+Die relative Veränderung im adjustierten Modell beträgt:
+```{r}
+irr <- exp(coef(modell_poisson_adjustiert)["intervention"])
+veraenderung_prozent <- 100 * (irr - 1)       #  in %
+round(veraenderung_prozent, 1)
+```
+
+Die erwartete Rate an HF-bedingten Krankenhausaufnahmen ist in der Telemonitoring/Interventionsgruppe um etwa 24,3 % niedriger als in der Regelversorgungsgruppe, bei gleicher Region, NYHA-Klasse, Diabetesstatus, Niereninsuffizienz und gleicher Ausprägung der berücksichtigten früheren Hospitalisierungen.
+
+
+
+## Cluster-robuste Standardfehler
+
+Da die Zuteilung auf Praxisebene erfolgte, verwenden wir für die statistische Inferenz cluster-robuste Standardfehler. Die zuvor gezeigten Modelle ohne Clusterkorrektur dienen ausschließlich dazu, den Einfluss dieser Korrektur auf die geschätzte Unsicherheit zu verdeutlichen.
+
+```{r}
+library(fixest) # erlaubt die Berechnung von robusten Standardfehlern
+
+# Basic model mit cluster-robusten Standardfehlern
+modell_poisson_robust_basis <- fepois(hf_hosp_12m ~ intervention + region +
+                offset(log(beobachtungsjahre)),
+                data = personen, vcov = ~praxis_id)
+#summary(modell_poisson_robust_basis)
+
+# Adjusted model mit cluster-robusten Standardfehlern
+modell_poisson_robust_adjustiert <- fepois(hf_hosp_12m ~ intervention + region + alter + 
+                        nyha + diabetes + niereninsuffizienz + hf_hosp_2026 +
+                        offset(log(beobachtungsjahre)),
+                        data = personen, vcov = ~praxis_id)
+#summary(modell_poisson_robust_adjustiert)
+
+# Modellvergleich: mit exponierten Koeffizienten
+modellvergleich_std_err <- modelsummary(list("Basismodell" = modell_poisson_robust_basis, 
+                          "Adjustiertes Modell" = modell_poisson_robust_adjustiert),
+                          exponentiate = TRUE, estimate = "{estimate}", 
+                          statistic = "({std.error})", stars = TRUE, output = "tinytable")
+modellvergleich_std_err
+
+
+modellvergleich_conf <- modelsummary(list("Basismodell" = modell_poisson_robust_basis, 
+                        "Adjustiertes Modell" = modell_poisson_robust_adjustiert),
+                        exponentiate = TRUE, estimate = "{estimate}", 
+                        statistic = "[{conf.low}, {conf.high}]", 
+                        stars = TRUE, output = "tinytable")
+modellvergleich_conf
+
+```
+
+
+Das adjustierte ITT-Ratenverhältnis beträgt **0.76** (95-%-KI: 0.65 bis 0.89). Dies entspricht einer geschätzten relativen Änderung der Aufnahmerate um **-24.3 %**.
+
+
+## Sensitivitätsanalysen
+
+### Negativ-Binomial-Regression
+
+Bei der Poisson-Verteilung ist die bedingte Varianz gleich dem bedingten Mittelwert. Aufnahmedaten können stärker streuen. Die **Negativ-Binomial-Regression** erlaubt zusätzliche Streuung und dient hier als Vergleich.
+
+```{r}
+#| label: negativ-binomial
+
+# Adjustierte Negativ-Binomial-Regression mit robusten Standardfehlern
+modell_nb_robust_adjustiert <- fenegbin(
+  hf_hosp_12m ~ intervention + region + alter + nyha +
+    diabetes + niereninsuffizienz + hf_hosp_2026 +
+    offset(log(beobachtungsjahre)),
+  data = personen,
+  vcov = ~praxis_id
+)
+
+# Vergleich der Interventionseffekte
+modelsummary(
+  list(
+    "Poisson" = modell_poisson_robust_adjustiert,
+    "Negativ-Binomial" = modell_nb_robust_adjustiert
+  ),
+  coef_map = c("intervention" = "Telemonitoring"),
+  exponentiate = TRUE,
+  estimate = "{estimate}",
+  statistic = "[{conf.low}, {conf.high}]",
+  output = "tinytable"
+)
+```
+
+Ähnliche IRR-Schätzungen sprechen dafür, dass der Befund nicht allein von der gewählten Zählverteilung abhängt. Die beiden Modelle korrigieren **nicht** automatisch informative Beobachtungszeiten oder andere systematische Fehler.
+
+
+
+
+### Ergänzung: Praxen als Beobachtungseinheiten
+
+Zur Kontrolle vergleichen wir die Raten auf Ebene der **48 randomisierten Praxen**. Dabei erhält jede Praxis dasselbe Gewicht – unabhängig davon, wie viele Versicherte sie hat.
+
+```{r}
+#| label: praxisebene
+
+modell_praxen <- lm(hosp_rate_je_100pj ~ intervention + region,
+              data = praxis_ergebnisse)
+
+praxis_schaetzung <- coef(modell_praxen)["intervention"]
+praxis_intervall <- confint(modell_praxen)["intervention", ]
+
+kable(data.frame(
+  effekt = unname(praxis_schaetzung),
+  ki_unten = unname(praxis_intervall[1]),
+  ki_oben = unname(praxis_intervall[2])
+), digits = 2,
+caption = "Zusätzliche Analyse: Differenz der Praxisraten pro 100 beobachtungsjahre")
+```
+
+**Achtung:** Dies ist eine **absolute Ratendifferenz**, kein IRR. Die Gewichtung und damit der Zielparameter unterscheiden sich vom patientenbasierten Poisson-Modell.
+
+
+
+
+# Lineare Regressionsanalyse der Mortalität und DAOH
+
+## Mortalität und Tage lebend außerhalb des Krankenhauses
+
+Eine geringere Aufnahmerate kann täuschen, wenn Patienten früher versterben. Wir betrachten deshalb zusätzlich das **Sterberisiko** und die **Tage lebend außerhalb des Krankenhauses** (*days alive and out of hospital*, DAOH).
+
+```{r}
+#| label: sekundare-endpunkte
+
+# Mortalität: lineares Wahrscheinlichkeitsmodell
+modell_tod <- feols(tod_12m ~ intervention + region + alter + nyha +
+    diabetes + niereninsuffizienz + hf_hosp_2026,
+  data = personen, vcov = ~praxis_id)
+
+# Days Alive and Out of Hospital (DAOH)
+modell_daoh <- feols(tage_lebend_ausserhalb_klinik ~ intervention + region +
+    alter + nyha + diabetes + niereninsuffizienz + hf_hosp_2026,
+  data = personen, vcov = ~praxis_id)
+
+# Gemeinsame Ergebnistabelle
+modelsummary(list("Mortalität" = modell_tod, "DAOH" = modell_daoh),
+  coef_map = c("intervention" = "Telemonitoring"),
+  estimate = "{estimate}", output = "tinytable")
+
+modellvergleich <- modelsummary(
+        list("Mortalität" = modell_tod, "DAOH" = modell_daoh),
+        estimate = "{estimate}", output = "tinytable", 
+        statistic = "({std.error})", stars = TRUE)
+modellvergleich
+
+```
+
+Beim linearen Mortalitätsmodell steht der Koeffizient für eine **absolute Risikodifferenz**: −0,02 entspricht zwei Prozentpunkten weniger Todesfällen, nicht zwei Prozent relativer Veränderung. Ein positiver DAOH-Effekt bedeutet mehr Tage lebend außerhalb des Krankenhauses. Diese sekundären Ergebnisse sind **explorativ**.
+
+
+## Weshalb wir nicht nur tatsächliche Nutzer vergleichen
+
+```{r}
+#| label: programm-nutzung
+
+nutzung <- personen %>%
+  group_by(programm_genutzt) %>%
+  summarise(
+    personen = n(),
+    mittleres_alter = mean(alter),
+    digitalzugang_prozent = 100 * mean(digitalzugang),
+    rate_je_100_pj = 100 * sum(hf_hosp_12m) / sum(beobachtungsjahre),
+    .groups = "drop"
+  )
+
+kable(nutzung, digits = 2,
+      caption = "Nur deskriptiv: Vergleich nach tatsächlicher Programmnutzung")
+```
+
+Die Nutzung ist **nicht randomisiert**. Sie kann beispielsweise vom Digitalzugang oder vom Gesundheitszustand abhängen. Ein Vergleich nach Nutzung wäre daher keine unverzerrte ITT-Analyse.
+
+
+# Übungen
+
+1.  Weshalb ist die Praxis – und nicht die Person – die Randomisierungseinheit?
+2.  Warum verwenden wir den Logarithmus der Beobachtungszeit als Offset?
+3.  Wie ändert sich das IRR zwischen Minimalmodell und adjustiertem Modell?
+4.  Sind Poisson- und Negativ-Binomial-Ergebnisse in Richtung und Größe ähnlich?
+5.  Warum können sinkende Aufnahmeraten ohne Betrachtung der Mortalität irreführend sein?
+6.  Welche Aussage dürfen wir aus dem Vergleich tatsächlicher Programmnutzer **nicht** ableiten?
+
+
+
+# Literatur
+
+-   Campbell et al. (2012): *CONSORT 2010 statement: extension to cluster randomised trials*. BMJ 345:e5661.
+-   ICH E9(R1): *Addendum on estimands and sensitivity analysis in clinical trials*.
+-   Hernán & Robins: *Causal Inference: What If*.

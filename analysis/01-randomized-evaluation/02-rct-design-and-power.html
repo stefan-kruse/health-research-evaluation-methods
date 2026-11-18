@@ -1,0 +1,1587 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="de" xml:lang="de"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.7.32">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="SK">
+
+<title>Cluster-RCT: Randomisierung und statistische Power</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="02-rct-design-and-power_files/libs/clipboard/clipboard.min.js"></script>
+<script src="02-rct-design-and-power_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="02-rct-design-and-power_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="02-rct-design-and-power_files/libs/quarto-html/popper.min.js"></script>
+<script src="02-rct-design-and-power_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="02-rct-design-and-power_files/libs/quarto-html/anchor.min.js"></script>
+<link href="02-rct-design-and-power_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="02-rct-design-and-power_files/libs/quarto-html/quarto-syntax-highlighting-37eea08aefeeee20ff55810ff984fec1.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="02-rct-design-and-power_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="02-rct-design-and-power_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="02-rct-design-and-power_files/libs/bootstrap/bootstrap-8a894fcc3cb5e37eb5bf30def131be2f.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN") {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+</head>
+
+<body class="quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+  <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Inhaltsverzeichnis</h2>
+   
+  <ul>
+  <li><a href="#lernziele" id="toc-lernziele" class="nav-link active" data-scroll-target="#lernziele"><span class="header-section-number">1</span> Lernziele</a></li>
+  <li><a href="#forschungsfrage-und-studiendesign" id="toc-forschungsfrage-und-studiendesign" class="nav-link" data-scroll-target="#forschungsfrage-und-studiendesign"><span class="header-section-number">2</span> Forschungsfrage und Studiendesign</a>
+  <ul class="collapse">
+  <li><a href="#was-wollen-wir-herausfinden" id="toc-was-wollen-wir-herausfinden" class="nav-link" data-scroll-target="#was-wollen-wir-herausfinden"><span class="header-section-number">2.1</span> Was wollen wir herausfinden?</a></li>
+  <li><a href="#der-einfluss-der-cluster-abhängigkeit" id="toc-der-einfluss-der-cluster-abhängigkeit" class="nav-link" data-scroll-target="#der-einfluss-der-cluster-abhängigkeit"><span class="header-section-number">2.2</span> Der Einfluss der Cluster-Abhängigkeit</a></li>
+  </ul></li>
+  <li><a href="#settings" id="toc-settings" class="nav-link" data-scroll-target="#settings"><span class="header-section-number">3</span> Settings</a>
+  <ul class="collapse">
+  <li><a href="#r-pakete" id="toc-r-pakete" class="nav-link" data-scroll-target="#r-pakete"><span class="header-section-number">3.1</span> R-Pakete</a></li>
+  <li><a href="#simulationseinstellungen" id="toc-simulationseinstellungen" class="nav-link" data-scroll-target="#simulationseinstellungen"><span class="header-section-number">3.2</span> Simulationseinstellungen</a></li>
+  </ul></li>
+  <li><a href="#praxen-stratifiziert-randomisieren" id="toc-praxen-stratifiziert-randomisieren" class="nav-link" data-scroll-target="#praxen-stratifiziert-randomisieren"><span class="header-section-number">4</span> Praxen stratifiziert randomisieren</a></li>
+  <li><a href="#künstliche-studiendaten-erzeugen" id="toc-künstliche-studiendaten-erzeugen" class="nav-link" data-scroll-target="#künstliche-studiendaten-erzeugen"><span class="header-section-number">5</span> Künstliche Studiendaten erzeugen</a>
+  <ul class="collapse">
+  <li><a href="#gemeinsame-risikofaktoren-innerhalb-einer-praxis" id="toc-gemeinsame-risikofaktoren-innerhalb-einer-praxis" class="nav-link" data-scroll-target="#gemeinsame-risikofaktoren-innerhalb-einer-praxis"><span class="header-section-number">5.1</span> Gemeinsame Risikofaktoren innerhalb einer Praxis</a></li>
+  <li><a href="#funktion-zur-datensimulation" id="toc-funktion-zur-datensimulation" class="nav-link" data-scroll-target="#funktion-zur-datensimulation"><span class="header-section-number">5.2</span> Funktion zur Datensimulation</a></li>
+  <li><a href="#eine-simulierte-studie-ansehen" id="toc-eine-simulierte-studie-ansehen" class="nav-link" data-scroll-target="#eine-simulierte-studie-ansehen"><span class="header-section-number">5.3</span> Eine simulierte Studie ansehen</a></li>
+  </ul></li>
+  <li><a href="#eine-studie-statistisch-auswerten" id="toc-eine-studie-statistisch-auswerten" class="nav-link" data-scroll-target="#eine-studie-statistisch-auswerten"><span class="header-section-number">6</span> Eine Studie statistisch auswerten</a></li>
+  <li><a href="#statistische-power-durch-wiederholte-simulation" id="toc-statistische-power-durch-wiederholte-simulation" class="nav-link" data-scroll-target="#statistische-power-durch-wiederholte-simulation"><span class="header-section-number">7</span> Statistische Power durch wiederholte Simulation</a>
+  <ul class="collapse">
+  <li><a href="#wie-wird-power-berechnet" id="toc-wie-wird-power-berechnet" class="nav-link" data-scroll-target="#wie-wird-power-berechnet"><span class="header-section-number">7.1</span> Wie wird Power berechnet?</a></li>
+  <li><a href="#funktion-zur-wiederholbaren-auswertung" id="toc-funktion-zur-wiederholbaren-auswertung" class="nav-link" data-scroll-target="#funktion-zur-wiederholbaren-auswertung"><span class="header-section-number">7.2</span> Funktion zur wiederholbaren Auswertung</a></li>
+  <li><a href="#eine-einzelne-power-schätzung" id="toc-eine-einzelne-power-schätzung" class="nav-link" data-scroll-target="#eine-einzelne-power-schätzung"><span class="header-section-number">7.3</span> Eine einzelne Power-Schätzung</a></li>
+  </ul></li>
+  <li><a href="#wie-beeinflussen-praxiszahl-clustergröße-und-icc-die-power" id="toc-wie-beeinflussen-praxiszahl-clustergröße-und-icc-die-power" class="nav-link" data-scroll-target="#wie-beeinflussen-praxiszahl-clustergröße-und-icc-die-power"><span class="header-section-number">8</span> Wie beeinflussen Praxiszahl, Clustergröße und ICC die Power?</a>
+  <ul class="collapse">
+  <li><a href="#studienszenarien-festlegen" id="toc-studienszenarien-festlegen" class="nav-link" data-scroll-target="#studienszenarien-festlegen"><span class="header-section-number">8.1</span> Studienszenarien festlegen</a></li>
+  <li><a href="#alle-szenarien-auswerten" id="toc-alle-szenarien-auswerten" class="nav-link" data-scroll-target="#alle-szenarien-auswerten"><span class="header-section-number">8.2</span> Alle Szenarien auswerten</a></li>
+  <li><a href="#power-nach-praxiszahl-und-icc" id="toc-power-nach-praxiszahl-und-icc" class="nav-link" data-scroll-target="#power-nach-praxiszahl-und-icc"><span class="header-section-number">8.3</span> Power nach Praxiszahl und ICC</a></li>
+  <li><a href="#was-bringen-mehr-patienten-pro-praxis" id="toc-was-bringen-mehr-patienten-pro-praxis" class="nav-link" data-scroll-target="#was-bringen-mehr-patienten-pro-praxis"><span class="header-section-number">8.4</span> Was bringen mehr Patienten pro Praxis?</a></li>
+  </ul></li>
+  <li><a href="#kontrolle-des-signifikanzniveaus-unter-der-nullhypothese" id="toc-kontrolle-des-signifikanzniveaus-unter-der-nullhypothese" class="nav-link" data-scroll-target="#kontrolle-des-signifikanzniveaus-unter-der-nullhypothese"><span class="header-section-number">9</span> Kontrolle des Signifikanzniveaus unter der Nullhypothese</a></li>
+  <li><a href="#methodische-grenzen-und-interpretation" id="toc-methodische-grenzen-und-interpretation" class="nav-link" data-scroll-target="#methodische-grenzen-und-interpretation"><span class="header-section-number">10</span> Methodische Grenzen und Interpretation</a></li>
+  </ul>
+</nav>
+</div>
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Cluster-RCT: Randomisierung und statistische Power</h1>
+<p class="subtitle lead">Studienplanung mit simulierten Versichertendaten</p>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Autor:in</div>
+    <div class="quarto-title-meta-contents">
+             <p>SK </p>
+          </div>
+  </div>
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="lernziele" class="level1" data-number="1">
+<h1 data-number="1"><span class="header-section-number">1</span> Lernziele</h1>
+<p>In diesem Modul untersuchen wir, wie sich das <strong>Design einer Cluster-randomisierten Studie</strong> auf die statistische Power auswirkt.</p>
+<p>Nach dem Modul kannst du:</p>
+<ol type="1">
+<li>Arztpraxen <strong>innerhalb von Regionen randomisieren</strong>;</li>
+<li>korrelierte Hospitalisierungszahlen für Patienten derselben Praxis simulieren;</li>
+<li>den Einfluss von <strong>Praxiszahl, Praxisgröße und Intracluster-Korrelation (ICC)</strong> untersuchen;</li>
+<li>die Power eines Cluster-RCT durch wiederholte Simulation schätzen;</li>
+<li>kontrollieren, ob ein Test unter der Nullhypothese ungefähr das vorgegebene Signifikanzniveau einhält.</li>
+</ol>
+<p><strong>Bezug zum ersten Skript:</strong> Dort analysieren wir ein bereits simuliertes Cluster-RCT mit 48 Praxen und etwa 2.000 Versicherten. Hier gehen wir einen Schritt zurück und untersuchen, <strong>wie man ein solches Studiendesign vorab planen könnte</strong>. Wir verwenden dafür neue, unabhängig simulierte Daten und benötigen keine CSV-Dateien.</p>
+<blockquote class="blockquote">
+<p><strong>Datenhinweis:</strong> Sämtliche Praxen, Personen, Risiken und Ergebnisse werden künstlich erzeugt. Die gewählten Parameter sind Lehrannahmen, keine Ergebnisse einer realen klinischen Studie und keine belegten Effektgrößen für Telemonitoring.</p>
+</blockquote>
+</section>
+<section id="forschungsfrage-und-studiendesign" class="level1" data-number="2">
+<h1 data-number="2"><span class="header-section-number">2</span> Forschungsfrage und Studiendesign</h1>
+<section id="was-wollen-wir-herausfinden" class="level2" data-number="2.1">
+<h2 data-number="2.1" class="anchored" data-anchor-id="was-wollen-wir-herausfinden"><span class="header-section-number">2.1</span> Was wollen wir herausfinden?</h2>
+<p><strong>Forschungsfrage:</strong> Wie viele Praxen und Patienten benötigen wir, um eine angenommene Verringerung der HF-Hospitalisierungsrate durch Telemonitoring mit ausreichender Wahrscheinlichkeit statistisch nachzuweisen? Mit anderen Worten: Wie beeinflussen die Anzahl randomisierter Arztpraxen, die Zahl der Patienten pro Praxis und die Intracluster-Korrelation die statistische Power einer cluster-randomisierten Studie?</p>
+<p>Wir betrachten ein <strong>stratifiziertes, parallelgruppiges Cluster-RCT</strong>. Innerhalb jeder von vier Regionen werden gleich viele Praxen der Intervention oder der Regelversorgung zugeteilt. Alle Patienten einer Praxis erhalten dieselbe <strong>randomisierte Zuteilung</strong>.</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Bestandteil</th>
+<th style="text-align: left;">Annahme in diesem Lehrprojekt</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Randomisierungseinheit</td>
+<td style="text-align: left;">Arztpraxis</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Studienarme</td>
+<td style="text-align: left;">Telemonitoring-Angebot und Regelversorgung</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Regionen</td>
+<td style="text-align: left;">Nord, Ost, Süd, West</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Zielparameter</td>
+<td style="text-align: left;">Incidence Rate Ratio (IRR) der HF-Aufnahmen</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Angenommener Interventionseffekt</td>
+<td style="text-align: left;">IRR = 0,80 (20 % niedrigere Rate)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Ausgangsrate</td>
+<td style="text-align: left;">0,8 HF-Aufnahmen pro Personenjahr, vor regionalen Unterschieden</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Beobachtung</td>
+<td style="text-align: left;">Eine Person wird ein volles Jahr beobachtet</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Hauptanalyse</td>
+<td style="text-align: left;">Poisson-Regression mit Region und cluster-robusten Standardfehlern</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Test</td>
+<td style="text-align: left;">Zweiseitig, Signifikanzniveau 5 %</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Vereinfachungen:</strong> Die Praxisgrößen sind innerhalb eines Szenarios gleich. Wir simulieren keine Todesfälle, fehlenden Werte, Nichtnutzung des Programms oder unterschiedliche Beobachtungszeiten. Der angenommene Effekt gilt daher direkt für die randomisierte Zuteilung.</p>
+</section>
+<section id="der-einfluss-der-cluster-abhängigkeit" class="level2" data-number="2.2">
+<h2 data-number="2.2" class="anchored" data-anchor-id="der-einfluss-der-cluster-abhängigkeit"><span class="header-section-number">2.2</span> Der Einfluss der Cluster-Abhängigkeit</h2>
+<p>Patienten derselben Praxis können sich ähnlicher sein als Patienten unterschiedlicher Praxen. Beispielsweise können regionale Besonderheiten, Behandlungsmuster und die Zusammensetzung der Patienten zu gemeinsamen Unterschieden zwischen den Praxen führen.</p>
+<p>Die <strong>ICC</strong> beschreibt die Ähnlichkeit der Ergebnisse innerhalb eines Clusters. Wenn die ICC steigt, liefern zusätzliche Patienten derselben Praxis weniger <em>unabhängige</em> Information.</p>
+<p>D.h. bei einer Cluster-Randomisierung sind die Beobachtungen innerhalb derselben Praxis korreliert. Dadurch enthalten 2.000 Patienten (einer Cluster-Randomisierung) weniger unabhängige statistische Information als bei einer individuellen Randomisierung. Der Design-Effekt beschreibt näherungsweise, um welchen Faktor sich die Varianz eines Schätzers aufgrund dieser Clusterabhängigkeit erhöht.</p>
+<p>Wir nehmen beispielhaft 42 Patienten pro Praxis und eine Intracluster-Korrelation (ICC) von 0,05 an. Diese ICC ist ein frei gewählter Wert für unsere Simulation. In einer realen Studie müsste sie möglichst anhand früherer Studien oder Pilotdaten begründet werden.</p>
+<p>Um zu veranschaulichen inwieweit sich die Varianz eines Schätzers durch Clusterabhängigkeit erhöht, berechnen wir den sogenannten <strong>Design-Effekt</strong> (für gleich große Cluster):</p>
+<p><span class="math display">\[
+DE = 1 + (m-1)\cdot ICC
+\]</span></p>
+<p>Dabei ist <span class="math inline">\(m\)</span> die Anzahl der Personen pro Praxis. Bei 42 Patienten und einer angenommenen ICC von 0,05 ergibt sich:</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>patienten_pro_praxis <span class="ot">&lt;-</span> <span class="dv">42</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>icc <span class="ot">&lt;-</span> <span class="fl">0.05</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>design_effekt <span class="ot">&lt;-</span> <span class="dv">1</span> <span class="sc">+</span> (patienten_pro_praxis <span class="sc">-</span> <span class="dv">1</span>) <span class="sc">*</span> icc</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(design_effekt, <span class="dv">2</span>)</span></code><button title="In die Zwischenablage kopieren" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] 3.05</code></pre>
+</div>
+</div>
+<p><strong>Interpretation</strong>: Der Design-Effekt von 3,05 bedeutet, dass die Varianz unter den vereinfachenden Annahmen etwa 3,05-mal so groß ist wie bei unabhängigen Beobachtungen. Eine Stichprobe von 2.000 Patienten entspricht damit hinsichtlich der statistischen Information näherungsweise 656 unabhängigen Beobachtungen. Der tatsächliche Präzisionsverlust hängt allerdings vom konkreten Studiendesign und statistischen Analyseverfahren ab.</p>
+</section>
+</section>
+<section id="settings" class="level1" data-number="3">
+<h1 data-number="3"><span class="header-section-number">3</span> Settings</h1>
+<section id="r-pakete" class="level2" data-number="3.1">
+<h2 data-number="3.1" class="anchored" data-anchor-id="r-pakete"><span class="header-section-number">3.1</span> R-Pakete</h2>
+<p>Wir benötigen für unsere Analyse drei Pakete. <code>fixest</code> schätzt die Poisson-Regression mit cluster-robusten Standardfehlern, <code>ggplot2</code> erstellt Grafiken und <code>knitr</code> formatiert Tabellen.</p>
+<p>Installiere die Pakete bei Bedarf einmalig in der R-Konsole:</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># install.packages(c("fixest", "ggplot2", "knitr", "modelsummary"))</span></span></code><button title="In die Zwischenablage kopieren" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(fixest)</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(ggplot2)</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(knitr)</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(modelsummary)</span></code><button title="In die Zwischenablage kopieren" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="simulationseinstellungen" class="level2" data-number="3.2">
+<h2 data-number="3.2" class="anchored" data-anchor-id="simulationseinstellungen"><span class="header-section-number">3.2</span> Simulationseinstellungen</h2>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Gleicher Startwert = reproduzierbare Zufallszahlen.</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">2026</span>)</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Für einen schnellen Test genügen 200 Wiederholungen.</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Für die abschließende Analyse besser 1.000 oder mehr wählen.</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>anzahl_wiederholungen <span class="ot">&lt;-</span> <span class="dv">1000</span></span></code><button title="In die Zwischenablage kopieren" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p><strong>Hinweis:</strong> Bei 200 Wiederholungen ist die geschätzte Power noch relativ ungenau. Wir erläutern diese Simulationsunsicherheit später. Die Berechnungszeit steigt mit der Zahl der Wiederholungen.</p>
+</section>
+</section>
+<section id="praxen-stratifiziert-randomisieren" class="level1" data-number="4">
+<h1 data-number="4"><span class="header-section-number">4</span> Praxen stratifiziert randomisieren</h1>
+<p>Zuerst schreiben wir eine einfache Funktion, die die Praxen gleichmäßig auf vier Regionen verteilt und <strong>innerhalb jeder Region</strong> jeweils die Hälfte den beiden Studienarmen (Interventionsgruppe und Kontrollgruppe) zufällig zuteilt.</p>
+<p>Die Anzahl der Praxen muss hier durch acht teilbar sein: Es gibt vier Regionen mit jeweils zwei gleich großen Studienarmen.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Die Praxiszahl muss positiv und durch 8 teilbar sein.</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="co"># So erhalten alle vier Regionen gleich viele Praxen,</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="co"># die jeweils zur Hälfte auf Intervention und Kontrolle verteilt werden.</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Der Operator %% berechnet in R den Rest einer Division.</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Mit == 0 prüfen wir, ob die Anzahl der Praxen ohne Rest durch 8 teilbar ist.</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>randomisiere_praxen <span class="ot">&lt;-</span> <span class="cf">function</span>(anzahl_praxen) {</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">stopifnot</span>(anzahl_praxen <span class="sc">&gt;</span> <span class="dv">0</span>, anzahl_praxen <span class="sc">%%</span> <span class="dv">8</span> <span class="sc">==</span> <span class="dv">0</span>)</span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>  praxen <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(</span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>    <span class="at">praxis_id =</span> <span class="dv">1</span><span class="sc">:</span>anzahl_praxen,     <span class="co"># Erzeugt eine fortlaufende Praxis IDs von 1-48</span></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>    <span class="at">region =</span> <span class="fu">factor</span>(<span class="fu">rep</span>(<span class="fu">c</span>(<span class="st">"Nord"</span>, <span class="st">"Ost"</span>, <span class="st">"Sued"</span>, <span class="st">"West"</span>), </span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>          <span class="at">each =</span> anzahl_praxen <span class="sc">/</span> <span class="dv">4</span>)),              <span class="co"># mit je (48/4=) 12 aus jeder Region</span></span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>    <span class="at">intervention =</span> <span class="dv">0</span>L) <span class="co"># Alle Praxen sind vorläufig mit 0 (Kontrollgr) kodiert.</span></span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>  <span class="co"># innerhalb jeder der vier Regionen werden genau die Hälfte der Praxen </span></span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a>  <span class="co"># zufällig der Interventionsgruppe und die andere Hälfte der Kontrollgruppe zugewiesen</span></span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>  <span class="cf">for</span> (x <span class="cf">in</span> <span class="fu">levels</span>(praxen<span class="sc">$</span>region)) {</span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a>            zeilen <span class="ot">&lt;-</span> <span class="fu">which</span>(praxen<span class="sc">$</span>region <span class="sc">==</span> x) <span class="co"># Zeilenlänge für jede Region=12</span></span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a>            haelfte <span class="ot">&lt;-</span> <span class="fu">length</span>(zeilen) <span class="sc">/</span> <span class="dv">2</span>     <span class="co"># 12/2 = 6</span></span>
+<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a>            <span class="co"># sample() mischt die Reihenfolge der beiden folgenden Vektoren zufällig</span></span>
+<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a>            <span class="co"># diese weden in die Spalte intervention der jeweiligen Praxen geschrieben</span></span>
+<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a>            praxen<span class="sc">$</span>intervention[zeilen] <span class="ot">&lt;-</span> <span class="fu">sample</span>(<span class="fu">c</span>(</span>
+<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a>                    <span class="fu">rep</span>(<span class="dv">0</span>L, haelfte),    <span class="co"># 0 0 0 0 0 0</span></span>
+<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a>                    <span class="fu">rep</span>(<span class="dv">1</span>L, haelfte)))    <span class="co"># 1 1 1 1 1 1</span></span>
+<span id="cb6-26"><a href="#cb6-26" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb6-27"><a href="#cb6-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-28"><a href="#cb6-28" aria-hidden="true" tabindex="-1"></a>  <span class="fu">return</span>(praxen)</span>
+<span id="cb6-29"><a href="#cb6-29" aria-hidden="true" tabindex="-1"></a>}</span></code><button title="In die Zwischenablage kopieren" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>Wir probieren die Funktion mit <strong>48 Praxen</strong> aus und prüfen die Verteilung.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>praxen_beispiel <span class="ot">&lt;-</span> <span class="fu">randomisiere_praxen</span>(<span class="dv">48</span>)</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="co"># erstelle im Beispiel-data.frame eine neue Faktor-Variable gruppe</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>praxen_beispiel<span class="sc">$</span>gruppe <span class="ot">&lt;-</span> <span class="fu">factor</span>(</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>  praxen_beispiel<span class="sc">$</span>intervention,</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">levels =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">1</span>),</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">labels =</span> <span class="fu">c</span>(<span class="st">"Regelversorgung"</span>, <span class="st">"Telemonitoring"</span>)</span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Häufigkeitstabelle: Praxen nach Region und Gruppe</span></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>knitr<span class="sc">::</span><span class="fu">kable</span>(<span class="fu">table</span>(<span class="at">Region =</span> praxen_beispiel<span class="sc">$</span>region, praxen_beispiel<span class="sc">$</span>gruppe),</span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    <span class="at">caption =</span> <span class="st">"Zufällige Praxiszuteilung nach Region"</span>)</span></code><button title="In die Zwischenablage kopieren" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<table class="caption-top table table-sm table-striped small">
+<caption>Zufällige Praxiszuteilung nach Region</caption>
+<thead>
+<tr class="header">
+<th style="text-align: left;"></th>
+<th style="text-align: right;">Regelversorgung</th>
+<th style="text-align: right;">Telemonitoring</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Nord</td>
+<td style="text-align: right;">6</td>
+<td style="text-align: right;">6</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Ost</td>
+<td style="text-align: right;">6</td>
+<td style="text-align: right;">6</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Sued</td>
+<td style="text-align: right;">6</td>
+<td style="text-align: right;">6</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">West</td>
+<td style="text-align: right;">6</td>
+<td style="text-align: right;">6</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<p>In jeder Region sollten <strong>sechs Interventions- und sechs Kontrollpraxen</strong> stehen. Welche <em>einzelnen</em> Praxen der Intervention zugeteilt werden, ist zufällig.</p>
+<p><strong>Wichtig:</strong> Randomisierung bedeutet nicht, dass alle Patientenmerkmale in den beiden Gruppen exakt gleich sind. Sie verhindert vielmehr, dass die Gruppenzuteilung systematisch von den späteren Ergebnissen abhängt.</p>
+</section>
+<section id="künstliche-studiendaten-erzeugen" class="level1" data-number="5">
+<h1 data-number="5"><span class="header-section-number">5</span> Künstliche Studiendaten erzeugen</h1>
+<section id="gemeinsame-risikofaktoren-innerhalb-einer-praxis" class="level2" data-number="5.1">
+<h2 data-number="5.1" class="anchored" data-anchor-id="gemeinsame-risikofaktoren-innerhalb-einer-praxis"><span class="header-section-number">5.1</span> Gemeinsame Risikofaktoren innerhalb einer Praxis</h2>
+<p>Damit sich die Patienten einer Praxis ähneln, geben wir jeder Praxis einen zufälligen <strong>Risikofaktor</strong>. Dieser verändert die erwartete Zahl der Krankenhausaufnahmen für <em>alle</em> Patienten dieser Praxis.</p>
+<p>Wir verwenden dafür eine Gamma-Verteilung. Somit sind die Risikofaktoren der Praxen positiv, haben einen Erwartungswert von 1 und variieren zwischen den Praxen. Zusammen mit der Poisson-Verteilung entsteht ein einfaches <strong>Gamma-Poisson-Modell</strong> mit korrelierten Ereigniszahlen innerhalb der Praxen.</p>
+<p>Die gewünschte ICC steuert hier <strong>näherungsweise</strong> die gemeinsame Variation im Kontrollarm bei der Ausgangsrate von 0,8. Weil die erwarteten Raten zwischen Regionen und Studienarmen variieren, ist die tatsächlich resultierende ICC nicht überall identisch.</p>
+</section>
+<section id="funktion-zur-datensimulation" class="level2" data-number="5.2">
+<h2 data-number="5.2" class="anchored" data-anchor-id="funktion-zur-datensimulation"><span class="header-section-number">5.2</span> Funktion zur Datensimulation</h2>
+<p>Jede simulierte Person hat eine Praxiszugehörigkeit und wird entsprechend der zufälligen Zuteilung ihrer Praxis der Interventions- oder Kontrollgruppe zugeordnet. Zusätzlich simulieren wir für jede Person die Anzahl der HF-bedingten Krankenhausaufnahmen im Beobachtungsjahr.</p>
+<p>Wir treffen 2 Annahmen: 1) Die Basisrate (Hospitalisierungsrate/ HF-Aufnahmerate) beträgt 0,8. Das entspricht durchschnittlich 80 Krankenhausaufnahmen pro 100 Patienten innerhalb eines Jahres. Da einzelne Patienten mehrfach hospitalisiert werden können, bedeutet dies nicht, dass 80 % der Patienten mindestens einmal ins Krankenhaus kommen. Das ist ein frei gewählter Wert für unser Simulationsbeispiel, keine empirisch ermittelte Hospitalisierungsrate.</p>
+<ol start="2" type="1">
+<li>Die 4 Regionen unterscheiden sich systematisch in ihren Hospitalisierungsraten. Die angegebenen Werte sind Multiplikatoren der Basisrate und sind vollständig frei gewählt: Nord:0,9 * 0,8 = 0,72 Ost: 1,0 * 0,8 = 0,80 Süd: 1,1 * 0,8 = 0,88 West:1,2 * 0,8 = 0,96</li>
+</ol>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>simuliere_studie <span class="ot">&lt;-</span> <span class="cf">function</span>(<span class="at">anzahl_praxen =</span> <span class="dv">48</span>,</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>                            <span class="at">patienten_pro_praxis =</span> <span class="dv">42</span>,</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>                            <span class="at">icc =</span> <span class="fl">0.05</span>,</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>                            <span class="at">irr =</span> <span class="fl">0.80</span>) {</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">stopifnot</span>(patienten_pro_praxis <span class="sc">&gt;</span> <span class="dv">0</span>)</span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">stopifnot</span>(icc <span class="sc">&gt;=</span> <span class="dv">0</span>, icc <span class="sc">&lt;</span> <span class="dv">1</span>, irr <span class="sc">&gt;</span> <span class="dv">0</span>)</span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>  <span class="co"># 1. Praxen innerhalb der Regionen randomisieren.</span></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>  praxen <span class="ot">&lt;-</span> <span class="fu">randomisiere_praxen</span>(anzahl_praxen)</span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a>  <span class="co"># 2. Erwartete Ausgangsrate und regionale Unterschiede.</span></span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a>  basisrate <span class="ot">&lt;-</span> <span class="fl">0.8</span></span>
+<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a>  regionale_rate <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="at">Nord =</span> <span class="fl">0.9</span>, <span class="at">Ost =</span> <span class="fl">1.0</span>,</span>
+<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a>                      <span class="at">Sued =</span> <span class="fl">1.1</span>, <span class="at">West =</span> <span class="fl">1.2</span>)</span>
+<span id="cb8-16"><a href="#cb8-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-17"><a href="#cb8-17" aria-hidden="true" tabindex="-1"></a>  <span class="co"># 3. Praxisbezogene Variation aus der angenommenen ICC.</span></span>
+<span id="cb8-18"><a href="#cb8-18" aria-hidden="true" tabindex="-1"></a>  <span class="co">#    Die Umrechnung gilt näherungsweise bei der Basisrate.</span></span>
+<span id="cb8-19"><a href="#cb8-19" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (icc <span class="sc">==</span> <span class="dv">0</span>) {</span>
+<span id="cb8-20"><a href="#cb8-20" aria-hidden="true" tabindex="-1"></a>    praxen<span class="sc">$</span>praxisrisiko <span class="ot">&lt;-</span> <span class="fu">rep</span>(<span class="dv">1</span>, anzahl_praxen)</span>
+<span id="cb8-21"><a href="#cb8-21" aria-hidden="true" tabindex="-1"></a>  } <span class="cf">else</span> {</span>
+<span id="cb8-22"><a href="#cb8-22" aria-hidden="true" tabindex="-1"></a>    varianz <span class="ot">&lt;-</span> icc <span class="sc">/</span> (basisrate <span class="sc">*</span> (<span class="dv">1</span> <span class="sc">-</span> icc))</span>
+<span id="cb8-23"><a href="#cb8-23" aria-hidden="true" tabindex="-1"></a>    praxen<span class="sc">$</span>praxisrisiko <span class="ot">&lt;-</span> <span class="fu">rgamma</span>(</span>
+<span id="cb8-24"><a href="#cb8-24" aria-hidden="true" tabindex="-1"></a>      anzahl_praxen,</span>
+<span id="cb8-25"><a href="#cb8-25" aria-hidden="true" tabindex="-1"></a>      <span class="at">shape =</span> <span class="dv">1</span> <span class="sc">/</span> varianz,</span>
+<span id="cb8-26"><a href="#cb8-26" aria-hidden="true" tabindex="-1"></a>      <span class="at">rate =</span> <span class="dv">1</span> <span class="sc">/</span> varianz</span>
+<span id="cb8-27"><a href="#cb8-27" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb8-28"><a href="#cb8-28" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb8-29"><a href="#cb8-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-30"><a href="#cb8-30" aria-hidden="true" tabindex="-1"></a>  <span class="co"># 4. Für jede Praxis die gleiche Zahl Personen erzeugen.</span></span>
+<span id="cb8-31"><a href="#cb8-31" aria-hidden="true" tabindex="-1"></a>  personen <span class="ot">&lt;-</span> praxen[</span>
+<span id="cb8-32"><a href="#cb8-32" aria-hidden="true" tabindex="-1"></a>    <span class="fu">rep</span>(<span class="dv">1</span><span class="sc">:</span>anzahl_praxen, <span class="at">each =</span> patienten_pro_praxis),</span>
+<span id="cb8-33"><a href="#cb8-33" aria-hidden="true" tabindex="-1"></a>  ]</span>
+<span id="cb8-34"><a href="#cb8-34" aria-hidden="true" tabindex="-1"></a>  personen<span class="sc">$</span>person_id <span class="ot">&lt;-</span> <span class="dv">1</span><span class="sc">:</span><span class="fu">nrow</span>(personen)</span>
+<span id="cb8-35"><a href="#cb8-35" aria-hidden="true" tabindex="-1"></a>  personen<span class="sc">$</span>beobachtungsjahre <span class="ot">&lt;-</span> <span class="dv">1</span></span>
+<span id="cb8-36"><a href="#cb8-36" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-37"><a href="#cb8-37" aria-hidden="true" tabindex="-1"></a>  <span class="co"># 5. Erwartete Zahl der Aufnahmen je Person berechnen.</span></span>
+<span id="cb8-38"><a href="#cb8-38" aria-hidden="true" tabindex="-1"></a>  <span class="co">#    IRR = 0.80 bedeutet eine um 20 % niedrigere Rate.</span></span>
+<span id="cb8-39"><a href="#cb8-39" aria-hidden="true" tabindex="-1"></a>  erwartete_aufnahmen <span class="ot">&lt;-</span> basisrate <span class="sc">*</span></span>
+<span id="cb8-40"><a href="#cb8-40" aria-hidden="true" tabindex="-1"></a>    regionale_rate[<span class="fu">as.character</span>(personen<span class="sc">$</span>region)] <span class="sc">*</span></span>
+<span id="cb8-41"><a href="#cb8-41" aria-hidden="true" tabindex="-1"></a>    irr<span class="sc">^</span>personen<span class="sc">$</span>intervention <span class="sc">*</span></span>
+<span id="cb8-42"><a href="#cb8-42" aria-hidden="true" tabindex="-1"></a>    personen<span class="sc">$</span>praxisrisiko <span class="sc">*</span></span>
+<span id="cb8-43"><a href="#cb8-43" aria-hidden="true" tabindex="-1"></a>    personen<span class="sc">$</span>beobachtungsjahre</span>
+<span id="cb8-44"><a href="#cb8-44" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-45"><a href="#cb8-45" aria-hidden="true" tabindex="-1"></a>  <span class="co"># 6. Zufällige Zahl von HF-Aufnahmen simulieren.</span></span>
+<span id="cb8-46"><a href="#cb8-46" aria-hidden="true" tabindex="-1"></a>  personen<span class="sc">$</span>hf_hosp_12m <span class="ot">&lt;-</span> <span class="fu">rpois</span>(</span>
+<span id="cb8-47"><a href="#cb8-47" aria-hidden="true" tabindex="-1"></a>    <span class="at">n =</span> <span class="fu">nrow</span>(personen),</span>
+<span id="cb8-48"><a href="#cb8-48" aria-hidden="true" tabindex="-1"></a>    <span class="at">lambda =</span> erwartete_aufnahmen</span>
+<span id="cb8-49"><a href="#cb8-49" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb8-50"><a href="#cb8-50" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-51"><a href="#cb8-51" aria-hidden="true" tabindex="-1"></a>  <span class="fu">return</span>(personen)</span>
+<span id="cb8-52"><a href="#cb8-52" aria-hidden="true" tabindex="-1"></a>}</span></code><button title="In die Zwischenablage kopieren" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>Die Simulation berücksichtigt wiederholte Aufnahmen: <code>hf_hosp_12m</code> kann also auch größer als 1 sein. Alle Patienten haben in diesem vereinfachten Beispiel <strong>ein vollständiges Beobachtungsjahr</strong>. Dh, dass jeder Patient genau 12 Monate lang beobachtet wird. Während dieses Jahres erfassen wir, wie oft ein Patient wegen Herzinsuffizienz (HF) ins Krankenhaus eingeliefert wird.</p>
+</section>
+<section id="eine-simulierte-studie-ansehen" class="level2" data-number="5.3">
+<h2 data-number="5.3" class="anchored" data-anchor-id="eine-simulierte-studie-ansehen"><span class="header-section-number">5.3</span> Eine simulierte Studie ansehen</h2>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>personen_beispiel <span class="ot">&lt;-</span> <span class="fu">simuliere_studie</span>(</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">anzahl_praxen =</span> <span class="dv">48</span>,</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">patienten_pro_praxis =</span> <span class="dv">42</span>,</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">icc =</span> <span class="fl">0.05</span>,</span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">irr =</span> <span class="fl">0.80</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Einige zentrale Eigenschaften überprüfen.</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a><span class="fu">stopifnot</span>(<span class="fu">length</span>(<span class="fu">unique</span>(personen_beispiel<span class="sc">$</span>praxis_id)) <span class="sc">==</span> <span class="dv">48</span>)</span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a><span class="fu">stopifnot</span>(<span class="fu">nrow</span>(personen_beispiel) <span class="sc">==</span> <span class="dv">48</span> <span class="sc">*</span> <span class="dv">42</span>)</span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a><span class="fu">stopifnot</span>(<span class="fu">all</span>(personen_beispiel<span class="sc">$</span>hf_hosp_12m <span class="sc">&gt;=</span> <span class="dv">0</span>))</span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a><span class="co"># View(personen_beispiel)</span></span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(<span class="fu">head</span>(personen_beispiel[, <span class="fu">c</span>(<span class="st">"person_id"</span>, <span class="st">"praxis_id"</span>, <span class="st">"region"</span>, <span class="st">"intervention"</span>, <span class="st">"hf_hosp_12m"</span>)]), <span class="at">caption =</span> <span class="st">"Die ersten sechs simulierten Personen"</span>)</span></code><button title="In die Zwischenablage kopieren" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<table class="caption-top table table-sm table-striped small">
+<caption>Die ersten sechs simulierten Personen</caption>
+<thead>
+<tr class="header">
+<th style="text-align: left;"></th>
+<th style="text-align: right;">person_id</th>
+<th style="text-align: right;">praxis_id</th>
+<th style="text-align: left;">region</th>
+<th style="text-align: right;">intervention</th>
+<th style="text-align: right;">hf_hosp_12m</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">1</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: left;">Nord</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">1.1</td>
+<td style="text-align: right;">2</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: left;">Nord</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">1.2</td>
+<td style="text-align: right;">3</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: left;">Nord</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">1.3</td>
+<td style="text-align: right;">4</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: left;">Nord</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">1</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">1.4</td>
+<td style="text-align: right;">5</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: left;">Nord</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">1.5</td>
+<td style="text-align: right;">6</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: left;">Nord</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<p>Die <strong>2.016 simulierten Patienten</strong> (48*42) liegen nahe bei den rund 2.000 Personen aus dem ersten Lehrskript. Die Daten sind aber neu erzeugt und müssen nicht dieselben Ergebnisse liefern.</p>
+</section>
+</section>
+<section id="eine-studie-statistisch-auswerten" class="level1" data-number="6">
+<h1 data-number="6"><span class="header-section-number">6</span> Eine Studie statistisch auswerten</h1>
+<p>Wir verwenden wie im ersten Skript eine <strong>Poisson-Regression</strong>. Die Variable <code>intervention</code> ist der randomisierte Studienarm; <code>region</code> berücksichtigt die Stratifizierung. Die Standardfehler werden auf Ebene der Praxen geclustert (siehe Skript 1).</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(modelsummary)</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>modell_beispiel <span class="ot">&lt;-</span> <span class="fu">fepois</span>(</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>  hf_hosp_12m <span class="sc">~</span> intervention <span class="sc">+</span> region <span class="sc">+</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>    <span class="fu">offset</span>(<span class="fu">log</span>(beobachtungsjahre)),</span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">data =</span> personen_beispiel,</span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">vcov =</span> <span class="sc">~</span>praxis_id</span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>fixest<span class="sc">::</span><span class="fu">etable</span>(modell_beispiel)</span></code><button title="In die Zwischenablage kopieren" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>                   modell_beispiel
+Dependent Var.:        hf_hosp_12m
+                                  
+Constant         -0.2485. (0.1345)
+intervention    -0.2608** (0.1002)
+regionOst          0.0504 (0.1545)
+regionSued         0.2162 (0.1445)
+regionWest         0.2231 (0.1613)
+_______________ __________________
+S.E.: Clustered      by: praxis_id
+Observations                 2,016
+Squared Cor.               0.01874
+Pseudo R2                  0.00880
+BIC                        4,763.9
+---
+Signif. codes: 0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="fu">modelsummary</span>(</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>  modell_beispiel,</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">exponentiate =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">estimate =</span> <span class="st">"{estimate}"</span>,</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">statistic =</span> <span class="st">"[{conf.low}, {conf.high}]"</span>,</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">fmt =</span> <span class="dv">3</span>)</span></code><button title="In die Zwischenablage kopieren" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<script src="https://cdn.jsdelivr.net/gh/vincentarelbundock/tinytable@main/inst/tinytable.js"></script>
+
+    <script>
+      // Create table-specific functions using external factory
+      const tableFns_k5b83b8jxoim26xgf4lt = TinyTable.createTableFunctions("tinytable_k5b83b8jxoim26xgf4lt");
+      // tinytable span after
+      window.addEventListener('load', function () {
+          var cellsToStyle = [
+            // tinytable style arrays after
+          { positions: [ { i: '16', j: 2 } ], css_id: 'tinytable_css_8pvfm2x478f7thsqgot4',}, 
+          { positions: [ { i: '10', j: 2 } ], css_id: 'tinytable_css_asc8fio7e32opc5oyucd',}, 
+          { positions: [ { i: '1', j: 2 }, { i: '2', j: 2 }, { i: '3', j: 2 }, { i: '4', j: 2 }, { i: '5', j: 2 }, { i: '6', j: 2 }, { i: '7', j: 2 }, { i: '8', j: 2 }, { i: '9', j: 2 }, { i: '11', j: 2 }, { i: '12', j: 2 }, { i: '13', j: 2 }, { i: '14', j: 2 }, { i: '15', j: 2 } ], css_id: 'tinytable_css_mutgj03zg2uq7mxf3njt',}, 
+          { positions: [ { i: '0', j: 2 } ], css_id: 'tinytable_css_sr6cq07uq98usctq718h',}, 
+          { positions: [ { i: '16', j: 1 } ], css_id: 'tinytable_css_ftknj0w3oesqfejn4clt',}, 
+          { positions: [ { i: '10', j: 1 } ], css_id: 'tinytable_css_obncvv96oxr9qhmwwu7d',}, 
+          { positions: [ { i: '1', j: 1 }, { i: '2', j: 1 }, { i: '3', j: 1 }, { i: '4', j: 1 }, { i: '5', j: 1 }, { i: '6', j: 1 }, { i: '7', j: 1 }, { i: '8', j: 1 }, { i: '9', j: 1 }, { i: '11', j: 1 }, { i: '12', j: 1 }, { i: '13', j: 1 }, { i: '14', j: 1 }, { i: '15', j: 1 } ], css_id: 'tinytable_css_0qnbonscwlh2oriwghwm',}, 
+          { positions: [ { i: '0', j: 1 } ], css_id: 'tinytable_css_vkcdes72r2wbddfxvejh',}, 
+          ];
+
+          // Loop over the arrays to style the cells
+          cellsToStyle.forEach(function (group) {
+              group.positions.forEach(function (cell) {
+                  tableFns_k5b83b8jxoim26xgf4lt.styleCell(cell.i, cell.j, group.css_id);
+              });
+          });
+      });
+    </script>
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/vincentarelbundock/tinytable@main/inst/tinytable.css">
+    <style>
+    /* tinytable css entries after */
+    #tinytable_k5b83b8jxoim26xgf4lt td.tinytable_css_8pvfm2x478f7thsqgot4, #tinytable_k5b83b8jxoim26xgf4lt th.tinytable_css_8pvfm2x478f7thsqgot4 {  position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.08em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --line-type-bottom: solid; --line-type-left: solid; --line-type-right: solid; --line-type-top: solid; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: center }
+    #tinytable_k5b83b8jxoim26xgf4lt td.tinytable_css_asc8fio7e32opc5oyucd, #tinytable_k5b83b8jxoim26xgf4lt th.tinytable_css_asc8fio7e32opc5oyucd {  position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.05em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --line-type-bottom: solid; --line-type-left: solid; --line-type-right: solid; --line-type-top: solid; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: center }
+    #tinytable_k5b83b8jxoim26xgf4lt td.tinytable_css_mutgj03zg2uq7mxf3njt, #tinytable_k5b83b8jxoim26xgf4lt th.tinytable_css_mutgj03zg2uq7mxf3njt { text-align: center }
+    #tinytable_k5b83b8jxoim26xgf4lt td.tinytable_css_sr6cq07uq98usctq718h, #tinytable_k5b83b8jxoim26xgf4lt th.tinytable_css_sr6cq07uq98usctq718h {  position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 1; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.05em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.08em; --line-type-bottom: solid; --line-type-left: solid; --line-type-right: solid; --line-type-top: solid; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: center }
+    #tinytable_k5b83b8jxoim26xgf4lt td.tinytable_css_ftknj0w3oesqfejn4clt, #tinytable_k5b83b8jxoim26xgf4lt th.tinytable_css_ftknj0w3oesqfejn4clt {  position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.08em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --line-type-bottom: solid; --line-type-left: solid; --line-type-right: solid; --line-type-top: solid; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: left }
+    #tinytable_k5b83b8jxoim26xgf4lt td.tinytable_css_obncvv96oxr9qhmwwu7d, #tinytable_k5b83b8jxoim26xgf4lt th.tinytable_css_obncvv96oxr9qhmwwu7d {  position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.05em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --line-type-bottom: solid; --line-type-left: solid; --line-type-right: solid; --line-type-top: solid; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: left }
+    #tinytable_k5b83b8jxoim26xgf4lt td.tinytable_css_0qnbonscwlh2oriwghwm, #tinytable_k5b83b8jxoim26xgf4lt th.tinytable_css_0qnbonscwlh2oriwghwm { text-align: left }
+    #tinytable_k5b83b8jxoim26xgf4lt td.tinytable_css_vkcdes72r2wbddfxvejh, #tinytable_k5b83b8jxoim26xgf4lt th.tinytable_css_vkcdes72r2wbddfxvejh {  position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 1; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.05em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.08em; --line-type-bottom: solid; --line-type-left: solid; --line-type-right: solid; --line-type-top: solid; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: left }
+    </style>
+    <div class="container">
+      <table class="tinytable" id="tinytable_k5b83b8jxoim26xgf4lt" style="width: auto; margin-left: auto; margin-right: auto;" data-quarto-disable-processing="true">
+        
+        <thead>
+              <tr>
+                <th scope="col" data-row="0" data-col="1"> </th>
+                <th scope="col" data-row="0" data-col="2">(1)</th>
+              </tr>
+        </thead>
+        
+        <tbody>
+                <tr>
+                  <td data-row="1" data-col="1">(Intercept)</td>
+                  <td data-row="1" data-col="2">0.780</td>
+                </tr>
+                <tr>
+                  <td data-row="2" data-col="1"></td>
+                  <td data-row="2" data-col="2">[0.599, 1.015]</td>
+                </tr>
+                <tr>
+                  <td data-row="3" data-col="1">intervention</td>
+                  <td data-row="3" data-col="2">0.770</td>
+                </tr>
+                <tr>
+                  <td data-row="4" data-col="1"></td>
+                  <td data-row="4" data-col="2">[0.633, 0.938]</td>
+                </tr>
+                <tr>
+                  <td data-row="5" data-col="1">regionOst</td>
+                  <td data-row="5" data-col="2">1.052</td>
+                </tr>
+                <tr>
+                  <td data-row="6" data-col="1"></td>
+                  <td data-row="6" data-col="2">[0.777, 1.424]</td>
+                </tr>
+                <tr>
+                  <td data-row="7" data-col="1">regionSued</td>
+                  <td data-row="7" data-col="2">1.241</td>
+                </tr>
+                <tr>
+                  <td data-row="8" data-col="1"></td>
+                  <td data-row="8" data-col="2">[0.935, 1.648]</td>
+                </tr>
+                <tr>
+                  <td data-row="9" data-col="1">regionWest</td>
+                  <td data-row="9" data-col="2">1.250</td>
+                </tr>
+                <tr>
+                  <td data-row="10" data-col="1"></td>
+                  <td data-row="10" data-col="2">[0.911, 1.715]</td>
+                </tr>
+                <tr>
+                  <td data-row="11" data-col="1">Num.Obs.</td>
+                  <td data-row="11" data-col="2">2016</td>
+                </tr>
+                <tr>
+                  <td data-row="12" data-col="1">R2</td>
+                  <td data-row="12" data-col="2">0.009</td>
+                </tr>
+                <tr>
+                  <td data-row="13" data-col="1">R2 Adj.</td>
+                  <td data-row="13" data-col="2">0.007</td>
+                </tr>
+                <tr>
+                  <td data-row="14" data-col="1">AIC</td>
+                  <td data-row="14" data-col="2">4735.8</td>
+                </tr>
+                <tr>
+                  <td data-row="15" data-col="1">BIC</td>
+                  <td data-row="15" data-col="2">4763.9</td>
+                </tr>
+                <tr>
+                  <td data-row="16" data-col="1">RMSE</td>
+                  <td data-row="16" data-col="2">0.91</td>
+                </tr>
+        </tbody>
+      </table>
+    </div>
+<!-- hack to avoid NA insertion in last line -->
+</div>
+<div class="sourceCode cell-code" id="cb13"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Incidence Rate Ratio für die Intervention ausgeben.</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>irr_geschaetzt <span class="ot">&lt;-</span> <span class="fu">exp</span>(<span class="fu">coef</span>(modell_beispiel)[<span class="st">"intervention"</span>])</span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>ki <span class="ot">&lt;-</span> <span class="fu">exp</span>(<span class="fu">confint</span>(modell_beispiel)[<span class="st">"intervention"</span>, ])</span></code><button title="In die Zwischenablage kopieren" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>Der geschätzte Interventionseffekt einer simulierten Studie liegt bei</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb14"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>irr_geschaetzt</span></code><button title="In die Zwischenablage kopieren" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>intervention 
+   0.7704367 </code></pre>
+</div>
+</div>
+<p><strong>Interpretation:</strong> Das geschätzte IRR einer <em>einzelnen</em> Studie kann vom vorgegebenen Wert 0,80 abweichen. Das ist erwartete Zufallsvariation. Ein Konfidenzintervall, das 1 einschließt, entspricht beim zugehörigen zweiseitigen Test im Regelfall keinem signifikanten Ergebnis auf dem 5-%-Niveau.</p>
+</section>
+<section id="statistische-power-durch-wiederholte-simulation" class="level1" data-number="7">
+<h1 data-number="7"><span class="header-section-number">7</span> Statistische Power durch wiederholte Simulation</h1>
+<section id="wie-wird-power-berechnet" class="level2" data-number="7.1">
+<h2 data-number="7.1" class="anchored" data-anchor-id="wie-wird-power-berechnet"><span class="header-section-number">7.1</span> Wie wird Power berechnet?</h2>
+<p>Die <strong>statistische Power</strong> ist die Wahrscheinlichkeit, einen tatsächlich vorhandenen Effekt mit dem gewählten statistischen Test zu erkennen. Dazu simulieren wir die gesamte Studie viele Male: neue Praxiseffekte, neue Hospitalisierungen und eine neue zufällige Zuteilung.</p>
+<p>Bei jeder Wiederholung berechnen wir:</p>
+<ul>
+<li>den p-Wert des Interventionseffekts;</li>
+<li>ob dieser unter 0,05 liegt;</li>
+<li>die Breite des 95-%-Konfidenzintervalls auf der <strong>log(IRR)-Skala</strong>.</li>
+</ul>
+<p>Die Konfidenzintervallbreite dient hier als einfaches Maß der <strong>Präzision</strong>: kleinere Werte bedeuten engere Intervalle. Die Power ist der Anteil signifikanter Ergebnisse bei einem tatsächlichen IRR von 0,80.</p>
+</section>
+<section id="funktion-zur-wiederholbaren-auswertung" class="level2" data-number="7.2">
+<h2 data-number="7.2" class="anchored" data-anchor-id="funktion-zur-wiederholbaren-auswertung"><span class="header-section-number">7.2</span> Funktion zur wiederholbaren Auswertung</h2>
+<p>Die folgende Funktion erhält <strong>einen simulierten Datensatz</strong> und gibt drei Kennzahlen zurück.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb16"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>analysiere_studie <span class="ot">&lt;-</span> <span class="cf">function</span>(personen) {</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>  modell <span class="ot">&lt;-</span> <span class="fu">fepois</span>(</span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>    hf_hosp_12m <span class="sc">~</span> intervention <span class="sc">+</span> region <span class="sc">+</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>      <span class="fu">offset</span>(<span class="fu">log</span>(beobachtungsjahre)),</span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">data =</span> personen,</span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">vcov =</span> <span class="sc">~</span>praxis_id</span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>  <span class="co"># P-Wert aus der Koeffiziententabelle.</span></span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>  p_wert <span class="ot">&lt;-</span> <span class="fu">coeftable</span>(modell)[<span class="st">"intervention"</span>, <span class="dv">4</span>]</span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>  <span class="co"># Konfidenzintervall auf der Log(IRR)-Skala.</span></span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a>  ki_log <span class="ot">&lt;-</span> <span class="fu">confint</span>(modell)[<span class="st">"intervention"</span>, ]</span>
+<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a>  <span class="co"># Eine Zahl pro Kennzahl zurückgeben.</span></span>
+<span id="cb16-16"><a href="#cb16-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">return</span>(<span class="fu">c</span>(<span class="at">signifikant =</span> <span class="fu">as.numeric</span>(p_wert <span class="sc">&lt;</span> <span class="fl">0.05</span>),</span>
+<span id="cb16-17"><a href="#cb16-17" aria-hidden="true" tabindex="-1"></a>    <span class="at">ki_breite =</span> <span class="fu">unname</span>(ki_log[<span class="dv">2</span>] <span class="sc">-</span> ki_log[<span class="dv">1</span>]),</span>
+<span id="cb16-18"><a href="#cb16-18" aria-hidden="true" tabindex="-1"></a>    <span class="at">irr =</span> <span class="fu">unname</span>(<span class="fu">exp</span>(<span class="fu">coef</span>(modell)[<span class="st">"intervention"</span>]))))</span>
+<span id="cb16-19"><a href="#cb16-19" aria-hidden="true" tabindex="-1"></a>}</span></code><button title="In die Zwischenablage kopieren" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="eine-einzelne-power-schätzung" class="level2" data-number="7.3">
+<h2 data-number="7.3" class="anchored" data-anchor-id="eine-einzelne-power-schätzung"><span class="header-section-number">7.3</span> Eine einzelne Power-Schätzung</h2>
+<p>Wir wiederholen ein Studiendesign mit <strong>48 Praxen, 42 Patienten je Praxis und ICC = 0,05</strong>.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb17"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Power-Simulation für ein Studiendesign</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>wiederholungen <span class="ot">&lt;-</span> <span class="fu">replicate</span>(anzahl_wiederholungen, {</span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>  <span class="co"># 1. Neue Studiendaten simulieren</span></span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>  personen <span class="ot">&lt;-</span> <span class="fu">simuliere_studie</span>(</span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">anzahl_praxen =</span> <span class="dv">48</span>,</span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">patienten_pro_praxis =</span> <span class="dv">42</span>,</span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">icc =</span> <span class="fl">0.05</span>,</span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a>    <span class="at">irr =</span> <span class="fl">0.80</span></span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a>  <span class="co"># 2. Simulierte Studie statistisch auswerten</span></span>
+<span id="cb17-14"><a href="#cb17-14" aria-hidden="true" tabindex="-1"></a>  ergebnis <span class="ot">&lt;-</span> <span class="fu">analysiere_studie</span>(personen)</span>
+<span id="cb17-15"><a href="#cb17-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-16"><a href="#cb17-16" aria-hidden="true" tabindex="-1"></a>  <span class="co"># 3. Nur speichern, ob der Effekt signifikant war</span></span>
+<span id="cb17-17"><a href="#cb17-17" aria-hidden="true" tabindex="-1"></a>  ergebnis[[<span class="st">"signifikant"</span>]]</span>
+<span id="cb17-18"><a href="#cb17-18" aria-hidden="true" tabindex="-1"></a>})</span>
+<span id="cb17-19"><a href="#cb17-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-20"><a href="#cb17-20" aria-hidden="true" tabindex="-1"></a><span class="co"># Prüfen, wie oft der Effekt signifikant war</span></span>
+<span id="cb17-21"><a href="#cb17-21" aria-hidden="true" tabindex="-1"></a><span class="fu">table</span>(wiederholungen, <span class="at">useNA =</span> <span class="st">"ifany"</span>)</span></code><button title="In die Zwischenablage kopieren" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>wiederholungen
+  0   1 
+297 703 </code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb19"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Statistische Power berechnen</span></span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>power_beispiel <span class="ot">&lt;-</span> <span class="fu">mean</span>(wiederholungen)</span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Ergebnisse darstellen</span></span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(</span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">data.frame</span>(</span>
+<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">Wiederholungen =</span> anzahl_wiederholungen,</span>
+<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">Power =</span> power_beispiel,</span>
+<span id="cb19-9"><a href="#cb19-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">Prozent =</span> <span class="dv">100</span> <span class="sc">*</span> power_beispiel</span>
+<span id="cb19-10"><a href="#cb19-10" aria-hidden="true" tabindex="-1"></a>  ),</span>
+<span id="cb19-11"><a href="#cb19-11" aria-hidden="true" tabindex="-1"></a>  <span class="at">digits =</span> <span class="dv">2</span>,</span>
+<span id="cb19-12"><a href="#cb19-12" aria-hidden="true" tabindex="-1"></a>  <span class="at">caption =</span> <span class="st">"Simulationsbasierte Power eines Studiendesigns"</span></span>
+<span id="cb19-13"><a href="#cb19-13" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="In die Zwischenablage kopieren" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<table class="caption-top table table-sm table-striped small">
+<caption>Simulationsbasierte Power eines Studiendesigns</caption>
+<thead>
+<tr class="header">
+<th style="text-align: right;">Wiederholungen</th>
+<th style="text-align: right;">Power</th>
+<th style="text-align: right;">Prozent</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: right;">1000</td>
+<td style="text-align: right;">0.7</td>
+<td style="text-align: right;">70.3</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<p><strong>Interpretation:</strong> Für ein Studiendesign mit 48 Praxen, 42 Patienten je Praxis, ICC = 0,05 und einem angenommenen tatsächlichen IRR von 0,80 haben wir 1000 Studien simuliert. In 703 Studien wurde der Interventionseffekt statistisch signifikant nachgewiesen; in 297 Studien nicht.</p>
+<p>Die geschätzte <strong>Power beträgt 70,3 %</strong>. Sie beschreibt die Wahrscheinlichkeit, mit dem gewählten Testverfahren unter diesen Annahmen ein signifikantes Ergebnis zu erhalten.</p>
+<p><strong>Welche Power ist ausreichend?</strong> Bei der Planung einer realen Studie werden häufig 80 % oder 90 % Power angestrebt. Ob ein Studiendesign diesen Richtwert erreicht, zeigt die Tabelle; eine Erhöhung der Zahl randomisierter Praxen könnte die Power verbessern.</p>
+<p>Die Power ist eine Schätzung mit Monte-Carlo-Unsicherheit. Außerdem muss das Testverfahren sein nominelles Signifikanzniveau angemessen einhalten. Wir prüfen deshalb später zusätzlich seine empirische Typ-I-Fehlerrate unter IRR = 1.</p>
+</section>
+</section>
+<section id="wie-beeinflussen-praxiszahl-clustergröße-und-icc-die-power" class="level1" data-number="8">
+<h1 data-number="8"><span class="header-section-number">8</span> Wie beeinflussen Praxiszahl, Clustergröße und ICC die Power?</h1>
+<section id="studienszenarien-festlegen" class="level2" data-number="8.1">
+<h2 data-number="8.1" class="anchored" data-anchor-id="studienszenarien-festlegen"><span class="header-section-number">8.1</span> Studienszenarien festlegen</h2>
+<p>Zuerst variieren wir <strong>Praxiszahl und ICC</strong> bei 42 Personen pro Praxis. Danach untersuchen wir für 48 Praxen und ICC = 0,05 zusätzlich Praxisgrößen von 20 und 60 Personen.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb20"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>szenarien <span class="ot">&lt;-</span> <span class="fu">expand.grid</span>(</span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">anzahl_praxen =</span> <span class="fu">c</span>(<span class="dv">24</span>, <span class="dv">48</span>, <span class="dv">72</span>),</span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">patienten_pro_praxis =</span> <span class="dv">42</span>,</span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">icc =</span> <span class="fu">c</span>(<span class="fl">0.01</span>, <span class="fl">0.05</span>, <span class="fl">0.10</span>)</span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Zwei weitere Szenarien zur Praxisgröße ergänzen.</span></span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>zusaetzliche_szenarien <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(</span>
+<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a>  <span class="at">anzahl_praxen =</span> <span class="dv">48</span>,</span>
+<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a>  <span class="at">patienten_pro_praxis =</span> <span class="fu">c</span>(<span class="dv">20</span>, <span class="dv">60</span>),</span>
+<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a>  <span class="at">icc =</span> <span class="fu">c</span>(<span class="fl">0.05</span>, <span class="fl">0.05</span>)</span>
+<span id="cb20-12"><a href="#cb20-12" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb20-13"><a href="#cb20-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-14"><a href="#cb20-14" aria-hidden="true" tabindex="-1"></a>szenarien <span class="ot">&lt;-</span> <span class="fu">rbind</span>(szenarien, zusaetzliche_szenarien)</span>
+<span id="cb20-15"><a href="#cb20-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-16"><a href="#cb20-16" aria-hidden="true" tabindex="-1"></a><span class="co"># Platz für die Simulationsergebnisse.</span></span>
+<span id="cb20-17"><a href="#cb20-17" aria-hidden="true" tabindex="-1"></a>szenarien<span class="sc">$</span>power <span class="ot">&lt;-</span> <span class="cn">NA_real_</span></span>
+<span id="cb20-18"><a href="#cb20-18" aria-hidden="true" tabindex="-1"></a>szenarien<span class="sc">$</span>mittlere_ki_breite <span class="ot">&lt;-</span> <span class="cn">NA_real_</span></span>
+<span id="cb20-19"><a href="#cb20-19" aria-hidden="true" tabindex="-1"></a>szenarien<span class="sc">$</span>mc_standardfehler <span class="ot">&lt;-</span> <span class="cn">NA_real_</span></span></code><button title="In die Zwischenablage kopieren" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="alle-szenarien-auswerten" class="level2" data-number="8.2">
+<h2 data-number="8.2" class="anchored" data-anchor-id="alle-szenarien-auswerten"><span class="header-section-number">8.2</span> Alle Szenarien auswerten</h2>
+<p>Die äußere Schleife geht die Studiendesigns durch. <code>replicate()</code> simuliert innerhalb jedes Designs viele unabhängige Studien und wertet sie jeweils aus.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb21"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="fu">nrow</span>(szenarien)) {</span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a>  <span class="co"># 1. Studiendesign wiederholt simulieren und auswerten</span></span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a>  ergebnisse <span class="ot">&lt;-</span> <span class="fu">replicate</span>(anzahl_wiederholungen, {</span>
+<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a>    personen <span class="ot">&lt;-</span> <span class="fu">simuliere_studie</span>(</span>
+<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a>      <span class="at">anzahl_praxen =</span> szenarien<span class="sc">$</span>anzahl_praxen[i],</span>
+<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a>      <span class="at">patienten_pro_praxis =</span> szenarien<span class="sc">$</span>patienten_pro_praxis[i],</span>
+<span id="cb21-9"><a href="#cb21-9" aria-hidden="true" tabindex="-1"></a>      <span class="at">icc =</span> szenarien<span class="sc">$</span>icc[i],</span>
+<span id="cb21-10"><a href="#cb21-10" aria-hidden="true" tabindex="-1"></a>      <span class="at">irr =</span> <span class="fl">0.80</span></span>
+<span id="cb21-11"><a href="#cb21-11" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb21-12"><a href="#cb21-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-13"><a href="#cb21-13" aria-hidden="true" tabindex="-1"></a>    <span class="fu">analysiere_studie</span>(personen)</span>
+<span id="cb21-14"><a href="#cb21-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-15"><a href="#cb21-15" aria-hidden="true" tabindex="-1"></a>  }, <span class="at">simplify =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb21-16"><a href="#cb21-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-17"><a href="#cb21-17" aria-hidden="true" tabindex="-1"></a>  <span class="co"># 2. Kennzahlen aus den einzelnen Studien auslesen</span></span>
+<span id="cb21-18"><a href="#cb21-18" aria-hidden="true" tabindex="-1"></a>  signifikant <span class="ot">&lt;-</span> <span class="fu">sapply</span>(</span>
+<span id="cb21-19"><a href="#cb21-19" aria-hidden="true" tabindex="-1"></a>    ergebnisse, <span class="cf">function</span>(x) x[[<span class="st">"signifikant"</span>]]</span>
+<span id="cb21-20"><a href="#cb21-20" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb21-21"><a href="#cb21-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-22"><a href="#cb21-22" aria-hidden="true" tabindex="-1"></a>  ki_breite <span class="ot">&lt;-</span> <span class="fu">sapply</span>(</span>
+<span id="cb21-23"><a href="#cb21-23" aria-hidden="true" tabindex="-1"></a>    ergebnisse, <span class="cf">function</span>(x) x[[<span class="st">"ki_breite"</span>]]</span>
+<span id="cb21-24"><a href="#cb21-24" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb21-25"><a href="#cb21-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-26"><a href="#cb21-26" aria-hidden="true" tabindex="-1"></a>  <span class="co"># 3. Prüfen, ob die Ergebnisse gültig sind</span></span>
+<span id="cb21-27"><a href="#cb21-27" aria-hidden="true" tabindex="-1"></a>  <span class="fu">stopifnot</span>(</span>
+<span id="cb21-28"><a href="#cb21-28" aria-hidden="true" tabindex="-1"></a>    <span class="fu">is.numeric</span>(signifikant),</span>
+<span id="cb21-29"><a href="#cb21-29" aria-hidden="true" tabindex="-1"></a>    <span class="fu">is.numeric</span>(ki_breite),</span>
+<span id="cb21-30"><a href="#cb21-30" aria-hidden="true" tabindex="-1"></a>    <span class="sc">!</span><span class="fu">anyNA</span>(signifikant),</span>
+<span id="cb21-31"><a href="#cb21-31" aria-hidden="true" tabindex="-1"></a>    <span class="sc">!</span><span class="fu">anyNA</span>(ki_breite)</span>
+<span id="cb21-32"><a href="#cb21-32" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb21-33"><a href="#cb21-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-34"><a href="#cb21-34" aria-hidden="true" tabindex="-1"></a>  <span class="co"># 4. Power und mittlere Konfidenzintervallbreite</span></span>
+<span id="cb21-35"><a href="#cb21-35" aria-hidden="true" tabindex="-1"></a>  szenarien<span class="sc">$</span>power[i] <span class="ot">&lt;-</span> <span class="fu">mean</span>(signifikant)</span>
+<span id="cb21-36"><a href="#cb21-36" aria-hidden="true" tabindex="-1"></a>  szenarien<span class="sc">$</span>mittlere_ki_breite[i] <span class="ot">&lt;-</span> <span class="fu">mean</span>(ki_breite)</span>
+<span id="cb21-37"><a href="#cb21-37" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-38"><a href="#cb21-38" aria-hidden="true" tabindex="-1"></a>  <span class="co"># 5. Monte-Carlo-Standardfehler der Power</span></span>
+<span id="cb21-39"><a href="#cb21-39" aria-hidden="true" tabindex="-1"></a>  p <span class="ot">&lt;-</span> szenarien<span class="sc">$</span>power[i]</span>
+<span id="cb21-40"><a href="#cb21-40" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-41"><a href="#cb21-41" aria-hidden="true" tabindex="-1"></a>  szenarien<span class="sc">$</span>mc_standardfehler[i] <span class="ot">&lt;-</span> <span class="fu">sqrt</span>(</span>
+<span id="cb21-42"><a href="#cb21-42" aria-hidden="true" tabindex="-1"></a>    p <span class="sc">*</span> (<span class="dv">1</span> <span class="sc">-</span> p) <span class="sc">/</span> anzahl_wiederholungen)</span>
+<span id="cb21-43"><a href="#cb21-43" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb21-44"><a href="#cb21-44" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-45"><a href="#cb21-45" aria-hidden="true" tabindex="-1"></a><span class="co"># Ergebnisse anzeigen</span></span>
+<span id="cb21-46"><a href="#cb21-46" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(</span>
+<span id="cb21-47"><a href="#cb21-47" aria-hidden="true" tabindex="-1"></a>  szenarien,</span>
+<span id="cb21-48"><a href="#cb21-48" aria-hidden="true" tabindex="-1"></a>  <span class="at">digits =</span> <span class="dv">3</span>,</span>
+<span id="cb21-49"><a href="#cb21-49" aria-hidden="true" tabindex="-1"></a>  <span class="at">col.names =</span> <span class="fu">c</span>(</span>
+<span id="cb21-50"><a href="#cb21-50" aria-hidden="true" tabindex="-1"></a>    <span class="st">"Praxen"</span>, <span class="st">"Patienten/Praxis"</span>, <span class="st">"ICC"</span>,<span class="st">"Power"</span>, <span class="st">"KI-Breite (log)"</span>, <span class="st">"MC-SE"</span>),</span>
+<span id="cb21-51"><a href="#cb21-51" aria-hidden="true" tabindex="-1"></a>  <span class="at">caption =</span> <span class="st">"Simulierte Power und Präzision verschiedener Designs"</span></span>
+<span id="cb21-52"><a href="#cb21-52" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="In die Zwischenablage kopieren" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<table class="caption-top table table-sm table-striped small">
+<caption>Simulierte Power und Präzision verschiedener Designs</caption>
+<thead>
+<tr class="header">
+<th style="text-align: right;">Praxen</th>
+<th style="text-align: right;">Patienten/Praxis</th>
+<th style="text-align: right;">ICC</th>
+<th style="text-align: right;">Power</th>
+<th style="text-align: right;">KI-Breite (log)</th>
+<th style="text-align: right;">MC-SE</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: right;">24</td>
+<td style="text-align: right;">42</td>
+<td style="text-align: right;">0.01</td>
+<td style="text-align: right;">0.779</td>
+<td style="text-align: right;">0.306</td>
+<td style="text-align: right;">0.013</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">48</td>
+<td style="text-align: right;">42</td>
+<td style="text-align: right;">0.01</td>
+<td style="text-align: right;">0.955</td>
+<td style="text-align: right;">0.228</td>
+<td style="text-align: right;">0.007</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">72</td>
+<td style="text-align: right;">42</td>
+<td style="text-align: right;">0.01</td>
+<td style="text-align: right;">0.991</td>
+<td style="text-align: right;">0.188</td>
+<td style="text-align: right;">0.003</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">24</td>
+<td style="text-align: right;">42</td>
+<td style="text-align: right;">0.05</td>
+<td style="text-align: right;">0.489</td>
+<td style="text-align: right;">0.449</td>
+<td style="text-align: right;">0.016</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">48</td>
+<td style="text-align: right;">42</td>
+<td style="text-align: right;">0.05</td>
+<td style="text-align: right;">0.729</td>
+<td style="text-align: right;">0.337</td>
+<td style="text-align: right;">0.014</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">72</td>
+<td style="text-align: right;">42</td>
+<td style="text-align: right;">0.05</td>
+<td style="text-align: right;">0.875</td>
+<td style="text-align: right;">0.281</td>
+<td style="text-align: right;">0.010</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">24</td>
+<td style="text-align: right;">42</td>
+<td style="text-align: right;">0.10</td>
+<td style="text-align: right;">0.348</td>
+<td style="text-align: right;">0.596</td>
+<td style="text-align: right;">0.015</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">48</td>
+<td style="text-align: right;">42</td>
+<td style="text-align: right;">0.10</td>
+<td style="text-align: right;">0.493</td>
+<td style="text-align: right;">0.447</td>
+<td style="text-align: right;">0.016</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">72</td>
+<td style="text-align: right;">42</td>
+<td style="text-align: right;">0.10</td>
+<td style="text-align: right;">0.643</td>
+<td style="text-align: right;">0.369</td>
+<td style="text-align: right;">0.015</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">48</td>
+<td style="text-align: right;">20</td>
+<td style="text-align: right;">0.05</td>
+<td style="text-align: right;">0.602</td>
+<td style="text-align: right;">0.394</td>
+<td style="text-align: right;">0.015</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">48</td>
+<td style="text-align: right;">60</td>
+<td style="text-align: right;">0.05</td>
+<td style="text-align: right;">0.754</td>
+<td style="text-align: right;">0.321</td>
+<td style="text-align: right;">0.014</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<p><strong>MC-SE</strong> bezeichnet den <em>Monte-Carlo-Standardfehler</em> der Power-Schätzung. Er entsteht dadurch, dass wir nur eine endliche Zahl von Studien simulieren. Für eine belastbarere Abschlussschätzung sollte <code>anzahl_wiederholungen</code> möglichst hoch sein.</p>
+</section>
+<section id="power-nach-praxiszahl-und-icc" class="level2" data-number="8.3">
+<h2 data-number="8.3" class="anchored" data-anchor-id="power-nach-praxiszahl-und-icc"><span class="header-section-number">8.3</span> Power nach Praxiszahl und ICC</h2>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb22"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>grafik_daten <span class="ot">&lt;-</span> <span class="fu">subset</span>(szenarien, patienten_pro_praxis <span class="sc">==</span> <span class="dv">42</span>)</span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(grafik_daten,</span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a>       <span class="fu">aes</span>(<span class="at">x =</span> anzahl_praxen, <span class="at">y =</span> power,</span>
+<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a>           <span class="at">color =</span> <span class="fu">factor</span>(icc), <span class="at">group =</span> <span class="fu">factor</span>(icc))) <span class="sc">+</span></span>
+<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_line</span>() <span class="sc">+</span></span>
+<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_point</span>(<span class="at">size =</span> <span class="dv">2</span>) <span class="sc">+</span></span>
+<span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_hline</span>(<span class="at">yintercept =</span> <span class="fl">0.80</span>, <span class="at">linetype =</span> <span class="st">"dashed"</span>) <span class="sc">+</span></span>
+<span id="cb22-9"><a href="#cb22-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_y_continuous</span>(<span class="at">limits =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">1</span>)) <span class="sc">+</span></span>
+<span id="cb22-10"><a href="#cb22-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(</span>
+<span id="cb22-11"><a href="#cb22-11" aria-hidden="true" tabindex="-1"></a>    <span class="at">x =</span> <span class="st">"Anzahl randomisierter Praxen"</span>,</span>
+<span id="cb22-12"><a href="#cb22-12" aria-hidden="true" tabindex="-1"></a>    <span class="at">y =</span> <span class="st">"Geschätzte Power"</span>,</span>
+<span id="cb22-13"><a href="#cb22-13" aria-hidden="true" tabindex="-1"></a>    <span class="at">color =</span> <span class="st">"ICC"</span>,</span>
+<span id="cb22-14"><a href="#cb22-14" aria-hidden="true" tabindex="-1"></a>    <span class="at">caption =</span> <span class="st">"Gestrichelte Linie: häufig verwendeter Planungsrichtwert von 80 %."</span></span>
+<span id="cb22-15"><a href="#cb22-15" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">+</span></span>
+<span id="cb22-16"><a href="#cb22-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_minimal</span>()</span></code><button title="In die Zwischenablage kopieren" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="02-rct-design-and-power_files/figure-html/power-grafik-1.png" class="img-fluid figure-img" width="672"></p>
+<figcaption>Simulierte Power nach Anzahl Praxen und angenommener ICC (42 Patienten je Praxis)</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p><strong>Erwartung:</strong> Mehr randomisierte Praxen erhöhen tendenziell die Power. Eine höhere ICC reduziert sie meist, weil Patienten derselben Praxis stärkere gemeinsame Schwankungen aufweisen. Durch die begrenzte Zahl der Simulationen können einzelne Linien trotzdem unregelmäßig verlaufen.</p>
+</section>
+<section id="was-bringen-mehr-patienten-pro-praxis" class="level2" data-number="8.4">
+<h2 data-number="8.4" class="anchored" data-anchor-id="was-bringen-mehr-patienten-pro-praxis"><span class="header-section-number">8.4</span> Was bringen mehr Patienten pro Praxis?</h2>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb23"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>groessen_daten <span class="ot">&lt;-</span> <span class="fu">subset</span>(</span>
+<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a>  szenarien, anzahl_praxen <span class="sc">==</span> <span class="dv">48</span> <span class="sc">&amp;</span> icc <span class="sc">==</span> <span class="fl">0.05</span></span>
+<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-5"><a href="#cb23-5" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(groessen_daten,</span>
+<span id="cb23-6"><a href="#cb23-6" aria-hidden="true" tabindex="-1"></a>       <span class="fu">aes</span>(<span class="at">x =</span> patienten_pro_praxis, <span class="at">y =</span> power)) <span class="sc">+</span></span>
+<span id="cb23-7"><a href="#cb23-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_line</span>() <span class="sc">+</span></span>
+<span id="cb23-8"><a href="#cb23-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_point</span>(<span class="at">size =</span> <span class="dv">2</span>) <span class="sc">+</span></span>
+<span id="cb23-9"><a href="#cb23-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_hline</span>(<span class="at">yintercept =</span> <span class="fl">0.80</span>, <span class="at">linetype =</span> <span class="st">"dashed"</span>) <span class="sc">+</span></span>
+<span id="cb23-10"><a href="#cb23-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_y_continuous</span>(<span class="at">limits =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">1</span>)) <span class="sc">+</span></span>
+<span id="cb23-11"><a href="#cb23-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(</span>
+<span id="cb23-12"><a href="#cb23-12" aria-hidden="true" tabindex="-1"></a>    <span class="at">x =</span> <span class="st">"Patienten je Praxis"</span>,</span>
+<span id="cb23-13"><a href="#cb23-13" aria-hidden="true" tabindex="-1"></a>    <span class="at">y =</span> <span class="st">"Geschätzte Power"</span>,</span>
+<span id="cb23-14"><a href="#cb23-14" aria-hidden="true" tabindex="-1"></a>    <span class="at">caption =</span> <span class="st">"48 Praxen, ICC = 0,05."</span></span>
+<span id="cb23-15"><a href="#cb23-15" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">+</span></span>
+<span id="cb23-16"><a href="#cb23-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_minimal</span>()</span></code><button title="In die Zwischenablage kopieren" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="02-rct-design-and-power_files/figure-html/praxisgroesse-grafik-1.png" class="img-fluid figure-img" width="624"></p>
+<figcaption>Simulierte Power bei 48 Praxen und ICC = 0,05</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p><strong>Interpretation:</strong> Mehr Patienten innerhalb derselben Praxis können die Präzision verbessern, ersetzen aber nicht die zusätzliche Information weiterer randomisierter Praxen. Bei positiver ICC nimmt ihr Zusatznutzen typischerweise ab.</p>
+</section>
+</section>
+<section id="kontrolle-des-signifikanzniveaus-unter-der-nullhypothese" class="level1" data-number="9">
+<h1 data-number="9"><span class="header-section-number">9</span> Kontrolle des Signifikanzniveaus unter der Nullhypothese</h1>
+<p>Eine Power-Simulation sollte nicht nur einen angenommenen Effekt von IRR = 0,80 untersuchen. Wir prüfen auch, wie oft das Verfahren <strong>einen Effekt meldet, obwohl in Wahrheit keiner vorhanden ist</strong>.</p>
+<p>Dafür setzen wir <code>irr = 1</code>. Der Anteil signifikanter Tests ist dann die <strong>empirische Typ-I-Fehlerrate</strong>. Bei einem nominellen Signifikanzniveau von 5 % sollte sie ungefähr 0,05 betragen. Mit wenigen Clustern können übliche cluster-robuste Verfahren aber ungenau sein.</p>
+<p>Die Power gibt an, wie oft unser Test bei einem tatsächlichen Effekt (IRR = 0,80) signifikant wird. Die Typ-I-Fehlerrate zeigt dagegen, wie häufig derselbe Test einen Effekt meldet, obwohl keiner existiert (IRR = 1). Beide Größen müssen gemeinsam beurteilt werden: Ein Test, der generell zu häufig die Nullhypothese verwirft, kann auch eine scheinbar hohe Power erreichen.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb24"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: nullsimulation</span></span>
+<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Drei Studiendesigns mit unterschiedlicher Praxiszahl</span></span>
+<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a>null_ergebnisse <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(</span>
+<span id="cb24-5"><a href="#cb24-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">anzahl_praxen =</span> <span class="fu">c</span>(<span class="dv">24</span>, <span class="dv">48</span>, <span class="dv">72</span>),</span>
+<span id="cb24-6"><a href="#cb24-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">typ1_rate =</span> <span class="cn">NA_real_</span></span>
+<span id="cb24-7"><a href="#cb24-7" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb24-8"><a href="#cb24-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-9"><a href="#cb24-9" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="fu">nrow</span>(null_ergebnisse)) {</span>
+<span id="cb24-10"><a href="#cb24-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-11"><a href="#cb24-11" aria-hidden="true" tabindex="-1"></a>  <span class="co"># 1. Studien ohne tatsächlichen Interventionseffekt simulieren</span></span>
+<span id="cb24-12"><a href="#cb24-12" aria-hidden="true" tabindex="-1"></a>  signifikant <span class="ot">&lt;-</span> <span class="fu">replicate</span>(anzahl_wiederholungen, {</span>
+<span id="cb24-13"><a href="#cb24-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-14"><a href="#cb24-14" aria-hidden="true" tabindex="-1"></a>    personen <span class="ot">&lt;-</span> <span class="fu">simuliere_studie</span>(</span>
+<span id="cb24-15"><a href="#cb24-15" aria-hidden="true" tabindex="-1"></a>      <span class="at">anzahl_praxen =</span> null_ergebnisse<span class="sc">$</span>anzahl_praxen[i],</span>
+<span id="cb24-16"><a href="#cb24-16" aria-hidden="true" tabindex="-1"></a>      <span class="at">patienten_pro_praxis =</span> <span class="dv">42</span>,</span>
+<span id="cb24-17"><a href="#cb24-17" aria-hidden="true" tabindex="-1"></a>      <span class="at">icc =</span> <span class="fl">0.05</span>,</span>
+<span id="cb24-18"><a href="#cb24-18" aria-hidden="true" tabindex="-1"></a>      <span class="at">irr =</span> <span class="fl">1.00</span>  <span class="co"># Kein tatsächlicher Interventionseffekt</span></span>
+<span id="cb24-19"><a href="#cb24-19" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb24-20"><a href="#cb24-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-21"><a href="#cb24-21" aria-hidden="true" tabindex="-1"></a>    <span class="co"># 2. Nur das Signifikanzergebnis auslesen</span></span>
+<span id="cb24-22"><a href="#cb24-22" aria-hidden="true" tabindex="-1"></a>    ergebnis <span class="ot">&lt;-</span> <span class="fu">analysiere_studie</span>(personen)</span>
+<span id="cb24-23"><a href="#cb24-23" aria-hidden="true" tabindex="-1"></a>    ergebnis[[<span class="st">"signifikant"</span>]]</span>
+<span id="cb24-24"><a href="#cb24-24" aria-hidden="true" tabindex="-1"></a>  })</span>
+<span id="cb24-25"><a href="#cb24-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-26"><a href="#cb24-26" aria-hidden="true" tabindex="-1"></a>  <span class="co"># 3. Prüfen, ob alle Simulationen gültig sind</span></span>
+<span id="cb24-27"><a href="#cb24-27" aria-hidden="true" tabindex="-1"></a>  <span class="fu">stopifnot</span>(</span>
+<span id="cb24-28"><a href="#cb24-28" aria-hidden="true" tabindex="-1"></a>    <span class="fu">is.numeric</span>(signifikant),</span>
+<span id="cb24-29"><a href="#cb24-29" aria-hidden="true" tabindex="-1"></a>    <span class="sc">!</span><span class="fu">anyNA</span>(signifikant),</span>
+<span id="cb24-30"><a href="#cb24-30" aria-hidden="true" tabindex="-1"></a>    <span class="fu">all</span>(signifikant <span class="sc">%in%</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">1</span>))</span>
+<span id="cb24-31"><a href="#cb24-31" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb24-32"><a href="#cb24-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-33"><a href="#cb24-33" aria-hidden="true" tabindex="-1"></a>  <span class="co"># 4. Anteil der fälschlich signifikanten Ergebnisse</span></span>
+<span id="cb24-34"><a href="#cb24-34" aria-hidden="true" tabindex="-1"></a>  null_ergebnisse<span class="sc">$</span>typ1_rate[i] <span class="ot">&lt;-</span> <span class="fu">mean</span>(signifikant)</span>
+<span id="cb24-35"><a href="#cb24-35" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb24-36"><a href="#cb24-36" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-37"><a href="#cb24-37" aria-hidden="true" tabindex="-1"></a><span class="co"># Ergebnisse darstellen</span></span>
+<span id="cb24-38"><a href="#cb24-38" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(</span>
+<span id="cb24-39"><a href="#cb24-39" aria-hidden="true" tabindex="-1"></a>  null_ergebnisse,</span>
+<span id="cb24-40"><a href="#cb24-40" aria-hidden="true" tabindex="-1"></a>  <span class="at">digits =</span> <span class="dv">3</span>,</span>
+<span id="cb24-41"><a href="#cb24-41" aria-hidden="true" tabindex="-1"></a>  <span class="at">col.names =</span> <span class="fu">c</span>(<span class="st">"Praxen"</span>, <span class="st">"Empirische Typ-I-Fehlerrate"</span>),</span>
+<span id="cb24-42"><a href="#cb24-42" aria-hidden="true" tabindex="-1"></a>  <span class="at">caption =</span> <span class="st">"Wie häufig wird unter IRR = 1 ein Effekt gemeldet?"</span></span>
+<span id="cb24-43"><a href="#cb24-43" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="In die Zwischenablage kopieren" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<table class="caption-top table table-sm table-striped small">
+<caption>Wie häufig wird unter IRR = 1 ein Effekt gemeldet?</caption>
+<thead>
+<tr class="header">
+<th style="text-align: right;">Praxen</th>
+<th style="text-align: right;">Empirische Typ-I-Fehlerrate</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: right;">24</td>
+<td style="text-align: right;">0.094</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">48</td>
+<td style="text-align: right;">0.055</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">72</td>
+<td style="text-align: right;">0.059</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<p><strong>Interpretation:</strong> Wir haben für jedes Studiendesign 1000 Studien ohne tatsächlichen Interventionseffekt (IRR = 1) simuliert. Ein signifikanter Befund ist in diesem Fall ein <strong>Typ-I-Fehler</strong> (falsch-positives Ergebnis).</p>
+<ul>
+<li><strong>24 Praxen:</strong> 9,4 % (94 von 1000 Studien).</li>
+<li><strong>48 Praxen:</strong> 5,5 % (55 von 1000 Studien).</li>
+<li><strong>72 Praxen:</strong> 5,9 % (59 von 1000 Studien).</li>
+</ul>
+<p>Bei einem nominellen Signifikanzniveau von 5 % erwarten wir langfristig eine Typ-I-Fehlerrate von ungefähr 5 %.</p>
+<p>Die Ergebnisse zeigen, dass die empirische Fehlerrate insbesondere bei 24 Praxen deutlich über diesem Niveau liegt. Bei 48 und 72 Praxen liegt sie dagegen näher am angestrebten Signifikanzniveau.</p>
+<p>Dies deutet darauf hin, dass das verwendete Testverfahren bei einer kleineren Anzahl randomisierter Praxen zu häufig falsch-positive Ergebnisse liefern könnte. Allerdings unterliegen auch diese Simulationsergebnisse zufälligen Schwankungen.</p>
+</section>
+<section id="methodische-grenzen-und-interpretation" class="level1" data-number="10">
+<h1 data-number="10"><span class="header-section-number">10</span> Methodische Grenzen und Interpretation</h1>
+<p>Dieses Lehrprojekt zeigt die <strong>Grundlogik einer simulationsbasierten Fallzahl- und Powerplanung</strong> für Cluster-RCTs. Es ersetzt keine vollständige Planung einer realen klinischen Studie.</p>
+<p>Die wichtigsten Grenzen sind:</p>
+<ul>
+<li><strong>Vereinfachte Daten:</strong> Jede Praxis hat gleich viele Patienten; alle Personen werden ein Jahr beobachtet. Todesfälle, Drop-out, Nichtnutzung des Angebots und fehlende Werte fehlen.</li>
+<li><strong>Modellabhängige ICC:</strong> Die vorgegebene ICC ist eine näherungsweise Zielgröße unseres Gamma-Poisson-Modells. Die resultierende Korrelation hängt auch von Ereignisrate und Studienarm ab.</li>
+<li><strong>Angenommene Effektgröße:</strong> Das IRR von 0,80 ist eine Lehrannahme. Für eine reale Planung müsste es fachlich begründet werden.</li>
+<li><strong>Keine Kostenoptimierung:</strong> Eine höhere Power bedeutet nicht automatisch, dass ein Studiendesign hinsichtlich Aufwand und Budget optimal ist.</li>
+<li><strong>Cluster-robuste Inferenz:</strong> Bei wenigen Praxen können p-Werte und Konfidenzintervalle ungenau kalibriert sein. Deshalb beurteilen wir Power und empirische Typ-I-Fehlerrate gemeinsam. Die Nullsimulation ist eine erste Plausibilitätsprüfung, kein allgemeiner Gütenachweis.</li>
+</ul>
+<p><strong>Zentrale Erkenntnis:</strong> In einer Cluster-RCT zählt nicht nur die Anzahl der Patienten. Vor allem die <strong>Anzahl unabhängig randomisierter Praxen</strong> und die <strong>Ähnlichkeit der Patienten innerhalb dieser Praxen</strong> bestimmen, wie präzise wir einen Interventionseffekt untersuchen können.</p>
+<p><strong>Weiterführende Aufgabe:</strong> In einer realistischeren Simulation könntest du ungleiche Praxisgrößen, vorzeitige Todesfälle und unterschiedliche Beobachtungszeiten berücksichtigen. Dann ist für die korrekte Beschreibung der ICC und die Wahl des Zielparameters zusätzliche Sorgfalt nötig.</p>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Kopiert");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Kopiert");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+        const codeEl = trigger.previousElementSibling.cloneNode(true);
+        for (const childEl of codeEl.children) {
+          if (isCodeAnnotation(childEl)) {
+            childEl.remove();
+          }
+        }
+        return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

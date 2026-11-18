@@ -1,0 +1,845 @@
+---
+title: "Cluster-RCT: Randomisierung und statistische Power"
+subtitle: "Studienplanung mit simulierten Versichertendaten"
+author: "SK"
+lang: de
+format:
+  html:
+    theme: cosmo
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    code-fold: false
+  # pdf:
+  #   pdf-engine: xelatex
+  #   toc: true
+  #   toc-depth: 3
+  #   number-sections: true
+execute:
+  echo: true
+  warning: false
+  message: false
+  error: false
+editor: 
+  markdown: 
+    wrap: 72
+---
+
+# Lernziele
+
+In diesem Modul untersuchen wir, wie sich das **Design einer
+Cluster-randomisierten Studie** auf die statistische Power auswirkt.
+
+Nach dem Modul kannst du:
+
+1.  Arztpraxen **innerhalb von Regionen randomisieren**;
+2.  korrelierte Hospitalisierungszahlen für Patienten derselben Praxis
+    simulieren;
+3.  den Einfluss von **Praxiszahl, Praxisgröße und
+    Intracluster-Korrelation (ICC)** untersuchen;
+4.  die Power eines Cluster-RCT durch wiederholte Simulation schätzen;
+5.  kontrollieren, ob ein Test unter der Nullhypothese ungefähr das
+    vorgegebene Signifikanzniveau einhält.
+
+**Bezug zum ersten Skript:** Dort analysieren wir ein bereits
+simuliertes Cluster-RCT mit 48 Praxen und etwa 2.000 Versicherten. Hier
+gehen wir einen Schritt zurück und untersuchen, **wie man ein solches
+Studiendesign vorab planen könnte**. Wir verwenden dafür neue,
+unabhängig simulierte Daten und benötigen keine CSV-Dateien.
+
+> **Datenhinweis:** Sämtliche Praxen, Personen, Risiken und Ergebnisse
+> werden künstlich erzeugt. Die gewählten Parameter sind Lehrannahmen,
+> keine Ergebnisse einer realen klinischen Studie und keine belegten
+> Effektgrößen für Telemonitoring.
+
+# Forschungsfrage und Studiendesign
+
+## Was wollen wir herausfinden?
+
+**Forschungsfrage:** Wie viele Praxen und Patienten benötigen wir, um
+eine angenommene Verringerung der HF-Hospitalisierungsrate durch
+Telemonitoring mit ausreichender Wahrscheinlichkeit statistisch
+nachzuweisen?
+Mit anderen Worten:
+Wie beeinflussen die Anzahl randomisierter Arztpraxen, 
+die Zahl der Patienten pro Praxis und die Intracluster-Korrelation 
+die statistische Power einer cluster-randomisierten Studie?
+
+Wir betrachten ein **stratifiziertes, parallelgruppiges Cluster-RCT**.
+Innerhalb jeder von vier Regionen werden gleich viele Praxen der
+Intervention oder der Regelversorgung zugeteilt. Alle Patienten einer
+Praxis erhalten dieselbe **randomisierte Zuteilung**.
+
+| Bestandteil | Annahme in diesem Lehrprojekt |
+|:-----------------------------------|:-----------------------------------|
+| Randomisierungseinheit | Arztpraxis |
+| Studienarme | Telemonitoring-Angebot und Regelversorgung |
+| Regionen | Nord, Ost, Süd, West |
+| Zielparameter | Incidence Rate Ratio (IRR) der HF-Aufnahmen |
+| Angenommener Interventionseffekt | IRR = 0,80 (20 % niedrigere Rate) |
+| Ausgangsrate | 0,8 HF-Aufnahmen pro Personenjahr, vor regionalen Unterschieden |
+| Beobachtung | Eine Person wird ein volles Jahr beobachtet |
+| Hauptanalyse | Poisson-Regression mit Region und cluster-robusten Standardfehlern |
+| Test | Zweiseitig, Signifikanzniveau 5 % |
+
+**Vereinfachungen:** Die Praxisgrößen sind innerhalb eines Szenarios
+gleich. Wir simulieren keine Todesfälle, fehlenden Werte, Nichtnutzung
+des Programms oder unterschiedliche Beobachtungszeiten. Der angenommene
+Effekt gilt daher direkt für die randomisierte Zuteilung.
+
+## Der Einfluss der Cluster-Abhängigkeit
+
+Patienten derselben Praxis können sich ähnlicher sein als Patienten
+unterschiedlicher Praxen. Beispielsweise können regionale
+Besonderheiten, Behandlungsmuster und die Zusammensetzung der Patienten
+zu gemeinsamen Unterschieden zwischen den Praxen führen.
+
+Die **ICC** beschreibt die Ähnlichkeit der Ergebnisse innerhalb eines
+Clusters. Wenn die ICC steigt, liefern zusätzliche Patienten derselben
+Praxis weniger *unabhängige* Information.
+
+D.h. bei einer Cluster-Randomisierung sind die Beobachtungen innerhalb
+derselben Praxis korreliert. Dadurch enthalten 2.000 Patienten (einer
+Cluster-Randomisierung) weniger unabhängige statistische Information als
+bei einer individuellen Randomisierung. Der Design-Effekt beschreibt
+näherungsweise, um welchen Faktor sich die Varianz eines Schätzers
+aufgrund dieser Clusterabhängigkeit erhöht.
+
+Wir nehmen beispielhaft 42 Patienten pro Praxis und eine
+Intracluster-Korrelation (ICC) von 0,05 an. Diese ICC ist ein frei
+gewählter Wert für unsere Simulation. In einer realen Studie müsste sie
+möglichst anhand früherer Studien oder Pilotdaten begründet werden.
+
+Um zu veranschaulichen inwieweit sich die Varianz eines Schätzers durch
+Clusterabhängigkeit erhöht, berechnen wir den sogenannten
+**Design-Effekt** (für gleich große Cluster):
+
+$$
+DE = 1 + (m-1)\cdot ICC
+$$
+
+Dabei ist $m$ die Anzahl der Personen pro Praxis. Bei 42 Patienten und
+einer angenommenen ICC von 0,05 ergibt sich:
+
+```{r}
+#| label: design-effekt
+
+patienten_pro_praxis <- 42
+icc <- 0.05
+
+design_effekt <- 1 + (patienten_pro_praxis - 1) * icc
+round(design_effekt, 2)
+
+```
+
+**Interpretation**: Der Design-Effekt von 3,05 bedeutet, dass die
+Varianz unter den vereinfachenden Annahmen etwa 3,05-mal so groß ist wie
+bei unabhängigen Beobachtungen. Eine Stichprobe von 2.000 Patienten
+entspricht damit hinsichtlich der statistischen Information
+näherungsweise 656 unabhängigen Beobachtungen. Der tatsächliche
+Präzisionsverlust hängt allerdings vom konkreten Studiendesign und
+statistischen Analyseverfahren ab.
+
+# Settings
+
+## R-Pakete
+
+Wir benötigen für unsere Analyse drei Pakete. `fixest` schätzt die
+Poisson-Regression mit cluster-robusten Standardfehlern, `ggplot2`
+erstellt Grafiken und `knitr` formatiert Tabellen.
+
+Installiere die Pakete bei Bedarf einmalig in der R-Konsole:
+
+```{r}
+# install.packages(c("fixest", "ggplot2", "knitr", "modelsummary"))
+```
+
+```{r}
+#| label: pakete
+library(fixest)
+library(ggplot2)
+library(knitr)
+library(modelsummary)
+```
+
+## Simulationseinstellungen
+
+```{r}
+# Gleicher Startwert = reproduzierbare Zufallszahlen.
+set.seed(2026)
+
+# Für einen schnellen Test genügen 200 Wiederholungen.
+# Für die abschließende Analyse besser 1.000 oder mehr wählen.
+anzahl_wiederholungen <- 1000
+
+```
+
+**Hinweis:** Bei 200 Wiederholungen ist die geschätzte Power noch
+relativ ungenau. Wir erläutern diese Simulationsunsicherheit später. Die
+Berechnungszeit steigt mit der Zahl der Wiederholungen.
+
+# Praxen stratifiziert randomisieren
+
+Zuerst schreiben wir eine einfache Funktion, die die Praxen gleichmäßig
+auf vier Regionen verteilt und **innerhalb jeder Region** jeweils die
+Hälfte den beiden Studienarmen (Interventionsgruppe und Kontrollgruppe)
+zufällig zuteilt.
+
+Die Anzahl der Praxen muss hier durch acht teilbar sein: Es gibt vier
+Regionen mit jeweils zwei gleich großen Studienarmen.
+
+```{r}
+#| label: randomisierung-funktion
+
+# Die Praxiszahl muss positiv und durch 8 teilbar sein.
+# So erhalten alle vier Regionen gleich viele Praxen,
+# die jeweils zur Hälfte auf Intervention und Kontrolle verteilt werden.
+# Der Operator %% berechnet in R den Rest einer Division.
+# Mit == 0 prüfen wir, ob die Anzahl der Praxen ohne Rest durch 8 teilbar ist.
+
+randomisiere_praxen <- function(anzahl_praxen) {
+  stopifnot(anzahl_praxen > 0, anzahl_praxen %% 8 == 0)
+
+  praxen <- data.frame(
+    praxis_id = 1:anzahl_praxen,     # Erzeugt eine fortlaufende Praxis IDs von 1-48
+    region = factor(rep(c("Nord", "Ost", "Sued", "West"), 
+          each = anzahl_praxen / 4)),              # mit je (48/4=) 12 aus jeder Region
+    intervention = 0L) # Alle Praxen sind vorläufig mit 0 (Kontrollgr) kodiert.
+
+  # innerhalb jeder der vier Regionen werden genau die Hälfte der Praxen 
+  # zufällig der Interventionsgruppe und die andere Hälfte der Kontrollgruppe zugewiesen
+  for (x in levels(praxen$region)) {
+            zeilen <- which(praxen$region == x) # Zeilenlänge für jede Region=12
+            haelfte <- length(zeilen) / 2     # 12/2 = 6
+            # sample() mischt die Reihenfolge der beiden folgenden Vektoren zufällig
+            # diese weden in die Spalte intervention der jeweiligen Praxen geschrieben
+            praxen$intervention[zeilen] <- sample(c(
+                    rep(0L, haelfte),    # 0 0 0 0 0 0
+                    rep(1L, haelfte)))    # 1 1 1 1 1 1
+  }
+
+  return(praxen)
+}
+```
+
+Wir probieren die Funktion mit **48 Praxen** aus und prüfen die
+Verteilung.
+
+```{r}
+#| label: randomisierung-beispiel
+
+praxen_beispiel <- randomisiere_praxen(48)
+
+# erstelle im Beispiel-data.frame eine neue Faktor-Variable gruppe
+praxen_beispiel$gruppe <- factor(
+  praxen_beispiel$intervention,
+  levels = c(0, 1),
+  labels = c("Regelversorgung", "Telemonitoring")
+)
+
+# Häufigkeitstabelle: Praxen nach Region und Gruppe
+knitr::kable(table(Region = praxen_beispiel$region, praxen_beispiel$gruppe),
+    caption = "Zufällige Praxiszuteilung nach Region")
+
+```
+
+In jeder Region sollten **sechs Interventions- und sechs
+Kontrollpraxen** stehen. Welche *einzelnen* Praxen der Intervention
+zugeteilt werden, ist zufällig.
+
+**Wichtig:** Randomisierung bedeutet nicht, dass alle Patientenmerkmale
+in den beiden Gruppen exakt gleich sind. Sie verhindert vielmehr, dass
+die Gruppenzuteilung systematisch von den späteren Ergebnissen abhängt.
+
+
+
+
+
+# Künstliche Studiendaten erzeugen
+
+## Gemeinsame Risikofaktoren innerhalb einer Praxis
+
+Damit sich die Patienten einer Praxis ähneln, geben wir jeder Praxis
+einen zufälligen **Risikofaktor**. Dieser verändert die erwartete Zahl
+der Krankenhausaufnahmen für *alle* Patienten dieser Praxis.
+
+Wir verwenden dafür eine Gamma-Verteilung. Somit sind die Risikofaktoren 
+der Praxen positiv, haben einen Erwartungswert von 1 und variieren zwischen 
+den Praxen. Zusammen mit der Poisson-Verteilung entsteht ein einfaches
+**Gamma-Poisson-Modell** mit korrelierten Ereigniszahlen innerhalb der
+Praxen.
+
+Die gewünschte ICC steuert hier **näherungsweise** die gemeinsame
+Variation im Kontrollarm bei der Ausgangsrate von 0,8. Weil die
+erwarteten Raten zwischen Regionen und Studienarmen variieren, ist die
+tatsächlich resultierende ICC nicht überall identisch.
+
+
+
+## Funktion zur Datensimulation
+
+Jede simulierte Person hat eine Praxiszugehörigkeit und wird entsprechend 
+der zufälligen Zuteilung ihrer Praxis der Interventions- oder 
+Kontrollgruppe zugeordnet. 
+Zusätzlich simulieren wir für jede Person die Anzahl der HF-bedingten 
+Krankenhausaufnahmen im Beobachtungsjahr.
+
+Wir treffen 2 Annahmen:
+1) Die Basisrate (Hospitalisierungsrate/ HF-Aufnahmerate) beträgt 0,8. 
+Das entspricht durchschnittlich 80 Krankenhausaufnahmen pro 100 Patienten 
+innerhalb eines Jahres. Da einzelne Patienten mehrfach hospitalisiert werden 
+können, bedeutet dies nicht, dass 80 % der Patienten mindestens einmal 
+ins Krankenhaus kommen.
+Das ist ein frei gewählter Wert für unser Simulationsbeispiel, 
+keine empirisch ermittelte Hospitalisierungsrate.
+
+2) Die 4 Regionen unterscheiden sich systematisch in ihren Hospitalisierungsraten. 
+Die angegebenen Werte sind Multiplikatoren der Basisrate und sind vollständig frei gewählt: 
+Nord:0,9 * 0,8 = 0,72 
+Ost: 1,0 * 0,8 = 0,80 
+Süd: 1,1 * 0,8 = 0,88
+West:1,2 * 0,8 = 0,96
+
+
+```{r}
+#| label: simulation-funktion
+
+simuliere_studie <- function(anzahl_praxen = 48,
+                            patienten_pro_praxis = 42,
+                            icc = 0.05,
+                            irr = 0.80) {
+
+  stopifnot(patienten_pro_praxis > 0)
+  stopifnot(icc >= 0, icc < 1, irr > 0)
+
+  # 1. Praxen innerhalb der Regionen randomisieren.
+  praxen <- randomisiere_praxen(anzahl_praxen)
+
+  # 2. Erwartete Ausgangsrate und regionale Unterschiede.
+  basisrate <- 0.8
+  regionale_rate <- c(Nord = 0.9, Ost = 1.0,
+                      Sued = 1.1, West = 1.2)
+
+  # 3. Praxisbezogene Variation aus der angenommenen ICC.
+  #    Die Umrechnung gilt näherungsweise bei der Basisrate.
+  if (icc == 0) {
+    praxen$praxisrisiko <- rep(1, anzahl_praxen)
+  } else {
+    varianz <- icc / (basisrate * (1 - icc))
+    praxen$praxisrisiko <- rgamma(
+      anzahl_praxen,
+      shape = 1 / varianz,
+      rate = 1 / varianz
+    )
+  }
+
+  # 4. Für jede Praxis die gleiche Zahl Personen erzeugen.
+  personen <- praxen[
+    rep(1:anzahl_praxen, each = patienten_pro_praxis),
+  ]
+  personen$person_id <- 1:nrow(personen)
+  personen$beobachtungsjahre <- 1
+
+  # 5. Erwartete Zahl der Aufnahmen je Person berechnen.
+  #    IRR = 0.80 bedeutet eine um 20 % niedrigere Rate.
+  erwartete_aufnahmen <- basisrate *
+    regionale_rate[as.character(personen$region)] *
+    irr^personen$intervention *
+    personen$praxisrisiko *
+    personen$beobachtungsjahre
+
+  # 6. Zufällige Zahl von HF-Aufnahmen simulieren.
+  personen$hf_hosp_12m <- rpois(
+    n = nrow(personen),
+    lambda = erwartete_aufnahmen
+  )
+
+  return(personen)
+}
+```
+
+Die Simulation berücksichtigt wiederholte Aufnahmen: `hf_hosp_12m` kann
+also auch größer als 1 sein. Alle Patienten haben in diesem
+vereinfachten Beispiel **ein vollständiges Beobachtungsjahr**.
+Dh, dass jeder Patient genau 12 Monate lang beobachtet wird.
+Während dieses Jahres erfassen wir, wie oft ein Patient wegen Herzinsuffizienz (HF) 
+ins Krankenhaus eingeliefert wird.
+
+
+## Eine simulierte Studie ansehen
+
+```{r}
+#| label: beispieldaten
+
+personen_beispiel <- simuliere_studie(
+  anzahl_praxen = 48,
+  patienten_pro_praxis = 42,
+  icc = 0.05,
+  irr = 0.80
+)
+
+# Einige zentrale Eigenschaften überprüfen.
+stopifnot(length(unique(personen_beispiel$praxis_id)) == 48)
+stopifnot(nrow(personen_beispiel) == 48 * 42)
+stopifnot(all(personen_beispiel$hf_hosp_12m >= 0))
+
+# View(personen_beispiel)
+kable(head(personen_beispiel[, c("person_id", "praxis_id", "region", "intervention", "hf_hosp_12m")]), caption = "Die ersten sechs simulierten Personen")
+```
+
+Die **2.016 simulierten Patienten** (48\*42) liegen nahe bei den rund
+2.000 Personen aus dem ersten Lehrskript. Die Daten sind aber neu
+erzeugt und müssen nicht dieselben Ergebnisse liefern.
+
+
+
+# Eine Studie statistisch auswerten
+
+Wir verwenden wie im ersten Skript eine **Poisson-Regression**. Die
+Variable `intervention` ist der randomisierte Studienarm; `region`
+berücksichtigt die Stratifizierung. Die Standardfehler werden auf Ebene
+der Praxen geclustert (siehe Skript 1).
+
+```{r}
+#| label: modell-beispiel
+
+library(modelsummary)
+
+modell_beispiel <- fepois(
+  hf_hosp_12m ~ intervention + region +
+    offset(log(beobachtungsjahre)),
+  data = personen_beispiel,
+  vcov = ~praxis_id
+)
+fixest::etable(modell_beispiel)
+modelsummary(
+  modell_beispiel,
+  exponentiate = TRUE,
+  estimate = "{estimate}",
+  statistic = "[{conf.low}, {conf.high}]",
+  fmt = 3)
+
+# Incidence Rate Ratio für die Intervention ausgeben.
+irr_geschaetzt <- exp(coef(modell_beispiel)["intervention"])
+ki <- exp(confint(modell_beispiel)["intervention", ])
+
+```
+
+Der geschätzte Interventionseffekt einer simulierten Studie liegt bei
+
+```{r}
+irr_geschaetzt
+```
+
+**Interpretation:** Das geschätzte IRR einer *einzelnen* Studie kann vom
+vorgegebenen Wert 0,80 abweichen. Das ist erwartete Zufallsvariation.
+Ein Konfidenzintervall, das 1 einschließt, entspricht beim zugehörigen
+zweiseitigen Test im Regelfall keinem signifikanten Ergebnis auf dem
+5-%-Niveau.
+
+
+
+
+
+# Statistische Power durch wiederholte Simulation
+
+## Wie wird Power berechnet?
+
+Die **statistische Power** ist die Wahrscheinlichkeit, einen tatsächlich
+vorhandenen Effekt mit dem gewählten statistischen Test zu erkennen.
+Dazu simulieren wir die gesamte Studie viele Male: neue Praxiseffekte,
+neue Hospitalisierungen und eine neue zufällige Zuteilung.
+
+Bei jeder Wiederholung berechnen wir:
+
+-   den p-Wert des Interventionseffekts;
+-   ob dieser unter 0,05 liegt;
+-   die Breite des 95-%-Konfidenzintervalls auf der **log(IRR)-Skala**.
+
+Die Konfidenzintervallbreite dient hier als einfaches Maß der
+**Präzision**: kleinere Werte bedeuten engere Intervalle. 
+Die Power ist der Anteil signifikanter Ergebnisse bei einem 
+tatsächlichen IRR von 0,80.
+
+## Funktion zur wiederholbaren Auswertung
+
+Die folgende Funktion erhält **einen simulierten Datensatz** und gibt
+drei Kennzahlen zurück.
+
+```{r}
+#| label: analyse-funktion
+
+analysiere_studie <- function(personen) {
+  modell <- fepois(
+    hf_hosp_12m ~ intervention + region +
+      offset(log(beobachtungsjahre)),
+    data = personen,
+    vcov = ~praxis_id
+  )
+
+  # P-Wert aus der Koeffiziententabelle.
+  p_wert <- coeftable(modell)["intervention", 4]
+
+  # Konfidenzintervall auf der Log(IRR)-Skala.
+  ki_log <- confint(modell)["intervention", ]
+
+  # Eine Zahl pro Kennzahl zurückgeben.
+  return(c(signifikant = as.numeric(p_wert < 0.05),
+    ki_breite = unname(ki_log[2] - ki_log[1]),
+    irr = unname(exp(coef(modell)["intervention"]))))
+}
+```
+
+## Eine einzelne Power-Schätzung
+
+Wir wiederholen ein Studiendesign mit **48 Praxen, 42 Patienten je
+Praxis und ICC = 0,05**.
+
+```{r}
+#| label: power-beispiel
+
+
+# Power-Simulation für ein Studiendesign
+
+wiederholungen <- replicate(anzahl_wiederholungen, {
+
+  # 1. Neue Studiendaten simulieren
+  personen <- simuliere_studie(
+    anzahl_praxen = 48,
+    patienten_pro_praxis = 42,
+    icc = 0.05,
+    irr = 0.80
+  )
+
+  # 2. Simulierte Studie statistisch auswerten
+  ergebnis <- analysiere_studie(personen)
+
+  # 3. Nur speichern, ob der Effekt signifikant war
+  ergebnis[["signifikant"]]
+})
+
+# Prüfen, wie oft der Effekt signifikant war
+table(wiederholungen, useNA = "ifany")
+
+# Statistische Power berechnen
+power_beispiel <- mean(wiederholungen)
+
+# Ergebnisse darstellen
+kable(
+  data.frame(
+    Wiederholungen = anzahl_wiederholungen,
+    Power = power_beispiel,
+    Prozent = 100 * power_beispiel
+  ),
+  digits = 2,
+  caption = "Simulationsbasierte Power eines Studiendesigns"
+)
+
+```
+
+**Interpretation:** Für ein Studiendesign mit 48 Praxen, 42 Patienten
+je Praxis, ICC = 0,05 und einem angenommenen tatsächlichen IRR von 0,80
+haben wir `r anzahl_wiederholungen` Studien simuliert. In
+`r sum(wiederholungen == 1)` Studien wurde der Interventionseffekt
+statistisch signifikant nachgewiesen; in
+`r sum(wiederholungen == 0)` Studien nicht.
+
+Die geschätzte **Power beträgt
+`r formatC(100 * power_beispiel, digits = 1, format = "f", decimal.mark = ",")` %**.
+Sie beschreibt die Wahrscheinlichkeit, mit dem gewählten Testverfahren
+unter diesen Annahmen ein signifikantes Ergebnis zu erhalten.
+
+**Welche Power ist ausreichend?** Bei der Planung einer realen Studie
+werden häufig 80 % oder 90 % Power angestrebt. Ob ein Studiendesign
+diesen Richtwert erreicht, zeigt die Tabelle; eine Erhöhung der Zahl
+randomisierter Praxen könnte die Power verbessern.
+
+Die Power ist eine Schätzung mit Monte-Carlo-Unsicherheit. Außerdem
+muss das Testverfahren sein nominelles Signifikanzniveau angemessen
+einhalten. Wir prüfen deshalb später zusätzlich seine empirische
+Typ-I-Fehlerrate unter IRR = 1.
+
+
+
+# Wie beeinflussen Praxiszahl, Clustergröße und ICC die Power?
+
+## Studienszenarien festlegen
+
+Zuerst variieren wir **Praxiszahl und ICC** bei 42 Personen pro Praxis.
+Danach untersuchen wir für 48 Praxen und ICC = 0,05 zusätzlich
+Praxisgrößen von 20 und 60 Personen.
+
+```{r}
+#| label: szenarien
+
+szenarien <- expand.grid(
+  anzahl_praxen = c(24, 48, 72),
+  patienten_pro_praxis = 42,
+  icc = c(0.01, 0.05, 0.10)
+)
+
+# Zwei weitere Szenarien zur Praxisgröße ergänzen.
+zusaetzliche_szenarien <- data.frame(
+  anzahl_praxen = 48,
+  patienten_pro_praxis = c(20, 60),
+  icc = c(0.05, 0.05)
+)
+
+szenarien <- rbind(szenarien, zusaetzliche_szenarien)
+
+# Platz für die Simulationsergebnisse.
+szenarien$power <- NA_real_
+szenarien$mittlere_ki_breite <- NA_real_
+szenarien$mc_standardfehler <- NA_real_
+
+```
+
+
+## Alle Szenarien auswerten
+
+Die äußere Schleife geht die Studiendesigns durch. `replicate()`
+simuliert innerhalb jedes Designs viele unabhängige Studien und wertet
+sie jeweils aus.
+
+```{r}
+#| label: szenarien-auswerten
+
+for (i in 1:nrow(szenarien)) {
+
+  # 1. Studiendesign wiederholt simulieren und auswerten
+  ergebnisse <- replicate(anzahl_wiederholungen, {
+
+    personen <- simuliere_studie(
+      anzahl_praxen = szenarien$anzahl_praxen[i],
+      patienten_pro_praxis = szenarien$patienten_pro_praxis[i],
+      icc = szenarien$icc[i],
+      irr = 0.80
+    )
+
+    analysiere_studie(personen)
+
+  }, simplify = FALSE)
+
+  # 2. Kennzahlen aus den einzelnen Studien auslesen
+  signifikant <- sapply(
+    ergebnisse, function(x) x[["signifikant"]]
+  )
+
+  ki_breite <- sapply(
+    ergebnisse, function(x) x[["ki_breite"]]
+  )
+
+  # 3. Prüfen, ob die Ergebnisse gültig sind
+  stopifnot(
+    is.numeric(signifikant),
+    is.numeric(ki_breite),
+    !anyNA(signifikant),
+    !anyNA(ki_breite)
+  )
+
+  # 4. Power und mittlere Konfidenzintervallbreite
+  szenarien$power[i] <- mean(signifikant)
+  szenarien$mittlere_ki_breite[i] <- mean(ki_breite)
+
+  # 5. Monte-Carlo-Standardfehler der Power
+  p <- szenarien$power[i]
+
+  szenarien$mc_standardfehler[i] <- sqrt(
+    p * (1 - p) / anzahl_wiederholungen)
+}
+
+# Ergebnisse anzeigen
+kable(
+  szenarien,
+  digits = 3,
+  col.names = c(
+    "Praxen", "Patienten/Praxis", "ICC","Power", "KI-Breite (log)", "MC-SE"),
+  caption = "Simulierte Power und Präzision verschiedener Designs"
+)
+
+```
+
+**MC-SE** bezeichnet den *Monte-Carlo-Standardfehler* der
+Power-Schätzung. Er entsteht dadurch, dass wir nur eine endliche Zahl
+von Studien simulieren. Für eine
+belastbarere Abschlussschätzung sollte `anzahl_wiederholungen` möglichst hoch sein.
+
+## Power nach Praxiszahl und ICC
+
+```{r}
+#| label: power-grafik
+#| fig-width: 7
+#| fig-height: 4.5
+#| fig-cap: "Simulierte Power nach Anzahl Praxen und angenommener ICC (42 Patienten je Praxis)"
+grafik_daten <- subset(szenarien, patienten_pro_praxis == 42)
+
+ggplot(grafik_daten,
+       aes(x = anzahl_praxen, y = power,
+           color = factor(icc), group = factor(icc))) +
+  geom_line() +
+  geom_point(size = 2) +
+  geom_hline(yintercept = 0.80, linetype = "dashed") +
+  scale_y_continuous(limits = c(0, 1)) +
+  labs(
+    x = "Anzahl randomisierter Praxen",
+    y = "Geschätzte Power",
+    color = "ICC",
+    caption = "Gestrichelte Linie: häufig verwendeter Planungsrichtwert von 80 %."
+  ) +
+  theme_minimal()
+```
+
+**Erwartung:** Mehr randomisierte Praxen erhöhen tendenziell die Power.
+Eine höhere ICC reduziert sie meist, weil Patienten derselben Praxis
+stärkere gemeinsame Schwankungen aufweisen. Durch die begrenzte Zahl der
+Simulationen können einzelne Linien trotzdem unregelmäßig verlaufen.
+
+## Was bringen mehr Patienten pro Praxis?
+
+```{r}
+#| label: praxisgroesse-grafik
+#| fig-width: 6.5
+#| fig-height: 4
+#| fig-cap: "Simulierte Power bei 48 Praxen und ICC = 0,05"
+groessen_daten <- subset(
+  szenarien, anzahl_praxen == 48 & icc == 0.05
+)
+
+ggplot(groessen_daten,
+       aes(x = patienten_pro_praxis, y = power)) +
+  geom_line() +
+  geom_point(size = 2) +
+  geom_hline(yintercept = 0.80, linetype = "dashed") +
+  scale_y_continuous(limits = c(0, 1)) +
+  labs(
+    x = "Patienten je Praxis",
+    y = "Geschätzte Power",
+    caption = "48 Praxen, ICC = 0,05."
+  ) +
+  theme_minimal()
+```
+
+**Interpretation:** Mehr Patienten innerhalb derselben Praxis können die
+Präzision verbessern, ersetzen aber nicht die zusätzliche Information
+weiterer randomisierter Praxen. Bei positiver ICC nimmt ihr Zusatznutzen
+typischerweise ab.
+
+
+
+
+# Kontrolle des Signifikanzniveaus unter der Nullhypothese
+
+Eine Power-Simulation sollte nicht nur einen angenommenen Effekt von IRR
+= 0,80 untersuchen. Wir prüfen auch, wie oft das Verfahren **einen
+Effekt meldet, obwohl in Wahrheit keiner vorhanden ist**.
+
+Dafür setzen wir `irr = 1`. Der Anteil signifikanter Tests ist dann die
+**empirische Typ-I-Fehlerrate**. Bei einem nominellen Signifikanzniveau
+von 5 % sollte sie ungefähr 0,05 betragen. Mit wenigen Clustern können
+übliche cluster-robuste Verfahren aber ungenau sein.
+
+Die Power gibt an, wie oft unser Test bei einem tatsächlichen Effekt (IRR = 0,80) signifikant wird. Die Typ-I-Fehlerrate zeigt dagegen, wie häufig derselbe Test einen Effekt meldet, obwohl keiner existiert (IRR = 1). Beide Größen müssen gemeinsam beurteilt werden: Ein Test, der generell zu häufig die Nullhypothese verwirft, kann auch eine scheinbar hohe Power erreichen.
+
+```{r}
+
+#| label: nullsimulation
+
+# Drei Studiendesigns mit unterschiedlicher Praxiszahl
+null_ergebnisse <- data.frame(
+  anzahl_praxen = c(24, 48, 72),
+  typ1_rate = NA_real_
+)
+
+for (i in 1:nrow(null_ergebnisse)) {
+
+  # 1. Studien ohne tatsächlichen Interventionseffekt simulieren
+  signifikant <- replicate(anzahl_wiederholungen, {
+
+    personen <- simuliere_studie(
+      anzahl_praxen = null_ergebnisse$anzahl_praxen[i],
+      patienten_pro_praxis = 42,
+      icc = 0.05,
+      irr = 1.00  # Kein tatsächlicher Interventionseffekt
+    )
+
+    # 2. Nur das Signifikanzergebnis auslesen
+    ergebnis <- analysiere_studie(personen)
+    ergebnis[["signifikant"]]
+  })
+
+  # 3. Prüfen, ob alle Simulationen gültig sind
+  stopifnot(
+    is.numeric(signifikant),
+    !anyNA(signifikant),
+    all(signifikant %in% c(0, 1))
+  )
+
+  # 4. Anteil der fälschlich signifikanten Ergebnisse
+  null_ergebnisse$typ1_rate[i] <- mean(signifikant)
+}
+
+# Ergebnisse darstellen
+kable(
+  null_ergebnisse,
+  digits = 3,
+  col.names = c("Praxen", "Empirische Typ-I-Fehlerrate"),
+  caption = "Wie häufig wird unter IRR = 1 ein Effekt gemeldet?"
+)
+
+```
+
+**Interpretation:** Wir haben für jedes Studiendesign
+`r anzahl_wiederholungen` Studien ohne tatsächlichen Interventionseffekt
+(IRR = 1) simuliert. Ein signifikanter Befund ist in diesem Fall ein
+**Typ-I-Fehler** (falsch-positives Ergebnis).
+
+- **24 Praxen:** `r formatC(100 * null_ergebnisse$typ1_rate[1], digits = 1, format = "f", decimal.mark = ",")` %
+  (`r round(null_ergebnisse$typ1_rate[1] * anzahl_wiederholungen)` von
+  `r anzahl_wiederholungen` Studien).
+- **48 Praxen:** `r formatC(100 * null_ergebnisse$typ1_rate[2], digits = 1, format = "f", decimal.mark = ",")` %
+  (`r round(null_ergebnisse$typ1_rate[2] * anzahl_wiederholungen)` von
+  `r anzahl_wiederholungen` Studien).
+- **72 Praxen:** `r formatC(100 * null_ergebnisse$typ1_rate[3], digits = 1, format = "f", decimal.mark = ",")` %
+  (`r round(null_ergebnisse$typ1_rate[3] * anzahl_wiederholungen)` von
+  `r anzahl_wiederholungen` Studien).
+
+Bei einem nominellen Signifikanzniveau von 5 % erwarten wir langfristig eine Typ-I-Fehlerrate von ungefähr 5 %.
+
+Die Ergebnisse zeigen, dass die empirische Fehlerrate insbesondere bei 24 Praxen deutlich über diesem Niveau liegt. Bei 48 und 72 Praxen liegt sie dagegen näher am angestrebten Signifikanzniveau.
+
+Dies deutet darauf hin, dass das verwendete Testverfahren bei einer kleineren Anzahl randomisierter Praxen zu häufig falsch-positive Ergebnisse liefern könnte. Allerdings unterliegen auch diese Simulationsergebnisse zufälligen Schwankungen.
+
+# Methodische Grenzen und Interpretation
+
+Dieses Lehrprojekt zeigt die **Grundlogik einer simulationsbasierten
+Fallzahl- und Powerplanung** für Cluster-RCTs. Es ersetzt keine
+vollständige Planung einer realen klinischen Studie.
+
+Die wichtigsten Grenzen sind:
+
+-   **Vereinfachte Daten:** Jede Praxis hat gleich viele Patienten; alle
+    Personen werden ein Jahr beobachtet. Todesfälle, Drop-out,
+    Nichtnutzung des Angebots und fehlende Werte fehlen.
+-   **Modellabhängige ICC:** Die vorgegebene ICC ist eine näherungsweise
+    Zielgröße unseres Gamma-Poisson-Modells. Die resultierende
+    Korrelation hängt auch von Ereignisrate und Studienarm ab.
+-   **Angenommene Effektgröße:** Das IRR von 0,80 ist eine Lehrannahme.
+    Für eine reale Planung müsste es fachlich begründet werden.
+-   **Keine Kostenoptimierung:** Eine höhere Power bedeutet nicht
+    automatisch, dass ein Studiendesign hinsichtlich Aufwand und Budget
+    optimal ist.
+-   **Cluster-robuste Inferenz:** Bei wenigen Praxen können p-Werte und 
+    Konfidenzintervalle ungenau kalibriert sein. Deshalb beurteilen wir Power 
+    und empirische Typ-I-Fehlerrate gemeinsam. Die Nullsimulation ist eine erste 
+    Plausibilitätsprüfung, kein allgemeiner Gütenachweis.
+
+**Zentrale Erkenntnis:** In einer Cluster-RCT zählt nicht nur die Anzahl
+der Patienten. Vor allem die **Anzahl unabhängig randomisierter Praxen**
+und die **Ähnlichkeit der Patienten innerhalb dieser Praxen** bestimmen,
+wie präzise wir einen Interventionseffekt untersuchen können.
+
+**Weiterführende Aufgabe:** In einer realistischeren Simulation könntest
+du ungleiche Praxisgrößen, vorzeitige Todesfälle und unterschiedliche
+Beobachtungszeiten berücksichtigen. Dann ist für die korrekte
+Beschreibung der ICC und die Wahl des Zielparameters zusätzliche
+Sorgfalt nötig.
