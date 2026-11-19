@@ -1,0 +1,46 @@
+datei,variable,deutsche_bezeichnung,einheit_oder_codierung,analysemethodische_rolle
+01_versicherte_baseline.csv,person_id,Pseudonymisierte Person,ID,Technischer eindeutiger Personenschlüssel
+01_versicherte_baseline.csv,alter_2025,Alter am Indexdatum,Jahre,Baseline-Confounder
+01_versicherte_baseline.csv,geschlecht,Geschlecht,w/m,Baseline-Confounder
+01_versicherte_baseline.csv,region,Fiktive Versorgungsregion,Nord/Ost/Sued/West,Routinedatenmerkmal
+01_versicherte_baseline.csv,laendlich,Wohnort ländlich,0/1,Baseline-Confounder
+01_versicherte_baseline.csv,nyha,Symptomschwere nach NYHA,Klasse II bis IV,Baseline-Krankheitsschwere
+01_versicherte_baseline.csv,lvef_prozent,Linksventrikuläre Ejektionsfraktion,Prozent,Baseline-Krankheitsschwere
+01_versicherte_baseline.csv,diabetes,Diabetesdiagnose,0/1,Vorerkrankung
+01_versicherte_baseline.csv,niereninsuffizienz,Chronische Nierenerkrankung,0/1,Vorerkrankung
+01_versicherte_baseline.csv,copd,Chronisch obstruktive Lungenerkrankung,0/1,Vorerkrankung
+01_versicherte_baseline.csv,hypertonie,Bluthochdruck,0/1,Vorerkrankung
+01_versicherte_baseline.csv,digitalzugang,Digitaler Zugang für Telemedizin,0/1,Baseline-Zuweisungsfaktor
+01_versicherte_baseline.csv,hf_hosp_2023,HF-Hospitalisierungen 2023,Anzahl,Vorbehandlung Outcome
+01_versicherte_baseline.csv,hf_hosp_2024,HF-Hospitalisierungen 2024,Anzahl,Vorbehandlung Outcome
+01_versicherte_baseline.csv,gkv_kosten_2023_eur,Simulierte Gesamtkosten 2023,EUR,Vorbehandlung Kosten
+01_versicherte_baseline.csv,gkv_kosten_2024_eur,Simulierte Gesamtkosten 2024,EUR,Vorbehandlung Kosten
+01_versicherte_baseline.csv,risiko_score,Simulierter Einladungs-Score,"Punkte (12–99,99)",Running Variable für fiktiven RD-Cutoff
+01_versicherte_baseline.csv,einladung_ab_70,Gezielte Einladung nach Score ≥ 70,0/1,"Instrument für fuzzy RD, kein reales G-BA-Kriterium"
+01_versicherte_baseline.csv,teilnahme,Teilnahme am Programm ab 01.01.2025,0/1,Behandlung (T)
+02_versichertenjahre_panel.csv,person_id,Pseudonymisierte Person,ID,Zusammen mit Jahr eindeutiger Schlüssel
+02_versichertenjahre_panel.csv,jahr,Beobachtungsjahr,2023/2024/2025,Zeitindex
+02_versichertenjahre_panel.csv,phase,Vor-/Nach-Periode,vorher/nachher,Zeitsegment
+02_versichertenjahre_panel.csv,teilnahme,Teilnahme in der Nachperiode,0/1; fehlend in Vorperioden,Im Panel vor Behandlung NA; per Baseline-Join ergänzen
+02_versichertenjahre_panel.csv,hf_hospitalisierungen,HF-Aufnahmen im Jahr,Anzahl,Zähl-Outcome
+02_versichertenjahre_panel.csv,beobachtungstage,Tage unter Risiko,1–365,365 in Vorperioden; ggf. kürzer in 2025
+02_versichertenjahre_panel.csv,hf_hosp_rate_365,Auf 365 Risiko-Tage annualisierte HF-Aufnahmerate,Anzahl je 365 Tage,Zielvariable DiD/OLS
+02_versichertenjahre_panel.csv,gkv_gesamtkosten_eur,Simulierte GKV-Jahreskosten,EUR,Sekundäres Outcome
+02_versichertenjahre_panel.csv,programmkosten_eur,Telemonitoringgebühr,EUR,Kostenzuschlag nur für Teilnehmende ab 2025
+02_versichertenjahre_panel.csv,andere_kosten_eur,Nicht-HF-Hospitalisierungskosten,EUR,Restliche Versorgungskosten
+03_ereigniszeit_2025.csv,person_id,Pseudonymisierte Person,ID,Eindeutig
+03_ereigniszeit_2025.csv,teilnahme,Telemonitoring,0/1,Behandlung
+03_ereigniszeit_2025.csv,zeit_bis_hf_oder_zensur_tage,Zeit bis erste HF-Aufnahme oder Zensierung,Tage,Survival-Zeit
+03_ereigniszeit_2025.csv,erstes_hf_ereignis,Erste HF-Aufnahme beobachtet,0/1,Event-Indikator
+03_ereigniszeit_2025.csv,tod_2025,Tod im Jahr 2025,0/1,Konkurrierendes Ereignis
+03_ereigniszeit_2025.csv,beobachtungstage,Risikozeit 2025,Tage,Nach Tod gekürzt
+03_ereigniszeit_2025.csv,hf_hosp_2025,HF-Aufnahmen 2025,Anzahl,Abgleich mit Panel
+04_krankenhausfaelle.csv,fall_id,Simulierte Fallnummer,ID,Eindeutig je Aufnahme
+04_krankenhausfaelle.csv,person_id,Pseudonymisierte Person,ID,Kann mehrfach vorkommen
+04_krankenhausfaelle.csv,jahr,Aufnahmejahr,2023/2024/2025,Zeitindex
+04_krankenhausfaelle.csv,aufnahme,Aufnahmedatum,YYYY-MM-DD,Erstes Ereignis für Survival
+04_krankenhausfaelle.csv,entlassung,Entlassungsdatum,YYYY-MM-DD,Fiktive Aufenthaltsdauer; Datum kann über Jahr hinaus reichen
+04_krankenhausfaelle.csv,diagnose_haupt,Synthetischer HF-Hauptdiagnose-Code,ICD-10-GM: I50.9,"Bewusst konstant, nicht diagnostisch vielseitig"
+04_krankenhausfaelle.csv,fallkosten_eur,Simulierte Kosten pro HF-Aufnahme,EUR,Komponente der GKV-Jahreskosten
+04_krankenhausfaelle.csv,aufnahmetyp,Aufnahmeart,ungeplant,HF-Outcome
+04_krankenhausfaelle.csv,leistungsart,Leistungsbereich,KH_Herzinsuffizienz,Stationärer HF-Fall
