@@ -1,0 +1,618 @@
+---
+title: "Beobachtungsstudie: Rohvergleich und Regressionsadjustierung"
+subtitle: "Telemonitoring bei Herzinsuffizienz · Modul 02.1"
+author: "Stefan Kruse"
+lang: de
+format:
+  html:
+    theme: cosmo
+    toc: true
+    number-sections: true
+    embed-resources: true
+execute:
+  echo: true
+  warning: true
+  message: false
+---
+
+**Datenhinweis:** Alle Versicherten, Krankenhausaufnahmen, Kosten und Programmteilnahmen in 
+diesem Lehrprojekt sind **vollständig synthetisch**.
+
+# Forschungsfrage und Studiendesign
+
+**Forschungsfrage:** Unterscheiden sich die HF-bedingten Krankenhausaufnahmen von Personen mit und ohne Telemonitoring 
+im Jahr 2025? 
+Wie verändert sich unser Ergebnis, wenn wir bereits vor Programmstart bestehende Unterschiede zwischen den Gruppen berücksichtigen?
+
+Im Unterschied zu einem randomisierten Experiment erfolgte die Teilnahme hier **nicht zufällig**. 
+Beispielsweise können Personen mit schwererer Herzinsuffizienz häufiger für das Programm ausgewählt werden und 
+zugleich ein höheres Hospitalisierungsrisiko aufweisen. Ein einfacher Vergleich der Gruppen kann 
+deshalb durch *Confounding by Indication* verzerrt sein.
+
+**Primäres Outcome:** Anzahl ungeplanter, herzinsuffizienzbezogener stationärer Aufnahmen je 365 Tage unter Beobachtung. 
+**Sekundäre Outcomes:** Kosten der Krankenversicherung und Zeit bis zur ersten HF-Hospitalisierung.
+
+Der Wirkmechanismus ist vereinfacht: 
+Telemonitoring → frühzeitiges Erkennen einer Verschlechterung → ambulante Reaktion → weniger ungeplante Krankenhauseinweisungen. 
+Das Programm verursacht zugleich zusätzliche Gebühren. Wir analysieren erst die Wirkung und anschließend 
+getrennt die mögliche langfristige Wirtschaftlichkeit.
+
+**Abkürzungen:** HF = Herzinsuffizienz; GKV = gesetzliche Krankenversicherung; 
+NYHA = Funktionsklassifikation der New York Heart Association; LVEF = linksventrikuläre Ejektionsfraktion; 
+
+
+| Zeitpunkt | Kalenderzeit | Rolle |
+|:-----------------------|:-----------------------|:-----------------------|
+| T−2 | 2023 | Erste Vorperiode und erste Trendmessung |
+| T−1 | 2024 | Zweite Vorperiode, letzte Daten vor Entscheidung |
+| T0 | 01.01.2025 | Programmstart / definierter Index für beide Gruppen |
+| T+1 | 2025 | 365 Tage Nachbeobachtung; Tod führt zu kürzerer Risikozeit |
+
+Die Teilnahme erfolgt **nicht zufällig**: höhere Krankheitslast, mehr vorherige HF-Aufnahmen und digitaler 
+Zugang wirken auf die Einschreibung. Eine rein fiktive Einladungsschwelle bei einem 
+Risiko-Score von **70 Punkten** erhöht die Teilnahme zusätzlich sprunghaft. 
+Dieser Score ist **kein reales G-BA-Zugangskriterium**. Diese Schwelle ermöglicht später einen *fuzzy* RD-Ansatz.
+
+In diesem Kapitel vergleichen wir absolute Unterschiede in annualisierten Hospitalisierungszahlen (lineare Regression) 
+mit relativen Hospitalisierungsraten (Poisson-Regression). Die Modelle beschreiben zunächst **adjustierte Zusammenhänge**. 
+Eine kausale Interpretation würde zusätzlich korrekte Modellannahmen erfordern.
+
+**Auftraggeber:** Fiktive gesetzliche Krankenkasse. **Intervention:** Telemedizinisches Monitoring und koordinierte Betreuung 
+von Patientinnen und Patienten mit Herzinsuffizienz (Beginn 1. Januar 2025). **Kontrolle:** Versorgung ohne Programmteilnahme. 
+**Population:** 2.000 fiktive Versicherte mit dokumentierter Herzinsuffizienz; 2023 und 2024 sind Vorperioden, 2025 die einjährige Nachperiode.
+
+
+## Analyse-Logik und Zielgrößen
+
+| Methode | Was wird geschätzt? | Zentraler Identifikationsgedanke |
+|:-----------------------|:-----------------------|:-----------------------|
+| Unadjustiert | Beobachtete Gruppendifferenz | Keine kausale Identifikation |
+| Regression | Kovariatenadjustierte Gruppendifferenz | Kein unbeobachtetes Confounding |
+
+# Pakete und Daten einlesen
+
+## Benötigte R-Pakete
+
+Installiere die folgenden Pakete bei Bedarf einmalig über die R-Konsole:
+
+``` r
+# install.packages(c("fixest", "dplyr", "vtable", "explore", "ggplot2", "knitr", "labelled"))
+```
+
+Die Pakete werden hier ausdrücklich geladen, sodass die verwendeten Funktionen im Skript erkennbar bleiben.
+
+```{r}
+#| label: pakete-regression
+
+library(fixest)    # Regressionsmodelle und robuste Standardfehler
+library(ggplot2)   # Grafiken
+library(knitr)     # Tabellen
+library(explore)
+library(vtable)
+library(dplyr)
+library(labelled)
+
+```
+
+## Importieren der CSV-Dateien
+
+Wir verwenden 4 der bereitgestellten CSV-Dateien:
+
+-   `01_versicherte_baseline.csv`: eine Zeile je Person; Ausgangsmerkmale, Hospitalisierungen vor 2025 und Programmteilnahme.
+-   `02_versichertenjahre_panel.csv`: eine Zeile je Person und Jahr; Beobachtungszeit und Kosten für 2023–2025.
+-   `03_ereigniszeit_2025.csv`: eine Zeile je Person; Hospitalisierungen in 2025.
+-   `datenwoerterbuch.csv`
+
+Die folgenden Pfade setzen diese Verzeichnisstruktur voraus:
+
+Beim Rendern führt Quarto die R-Befehle standardmäßig relativ zum Verzeichnis dieser `.qmd`-Datei aus. 
+Deshalb führt `../../data/` zum Datenordner im Repository-Hauptverzeichnis.
+
+```{r}
+#| label: daten-einlesen
+
+# Verzeichnis mit den synthetischen CSV-Dateien
+ordner_daten <- "../../data"
+
+# Vollständige Dateipfade erstellen
+datei_baseline <- file.path(ordner_daten, "01_versicherte_baseline.csv")
+datei_panel <- file.path(ordner_daten, "02_versichertenjahre_panel.csv")
+datei_ereigniszeit_2025 <- file.path(ordner_daten, "03_ereigniszeit_2025.csv")
+
+# Vor dem Einlesen prüfen, ob beide Dateien existieren
+if (!file.exists(datei_baseline) || !file.exists(datei_panel)) {
+  stop("CSV-Dateien nicht gefunden. Bitte Ordnerstruktur und Dateipfade prüfen.")
+}
+
+# Eine Zeile je versicherter Person
+stamm <- read.csv(datei_baseline, stringsAsFactors = FALSE)
+
+# Eine Zeile je Person und Beobachtungsjahr
+panel <- read.csv(datei_panel, stringsAsFactors = FALSE)
+
+# Eine Zeile je versicherter Person
+ereigniszeit <- read.csv(datei_ereigniszeit_2025, stringsAsFactors = FALSE)
+
+# Überblick über die importierten Daten
+cat("Personen im Baseline-Datensatz:", nrow(stamm), "\n")
+cat("Personenjahre im Panel-Datensatz:", nrow(panel), "\n")
+table(panel$jahr)
+
+```
+
+## Merge Stammdaten mit outcomes
+
+Für die Regressionsanalysen benötigen wir **eine Zeile je Person**. Dazu nehmen wir die Ausgangsmerkmale aus `stamm` und ergänzen die Outcomes und Beobachtungszeiten für das Jahr 2025 aus `panel`.
+
+```{r}
+#| label: merging
+
+# 1. Prüfen, ob Personen eindeutig identifiziert werden können
+if (any(duplicated(stamm$person_id))) {
+  stop("Die Baseline-Datei enthält doppelte Personen-IDs.")
+}
+
+if (any(duplicated(panel[c("person_id", "jahr")]))) {
+  stop("Im Panel gibt es doppelte Kombinationen aus Person und Jahr.")
+}
+
+# 2. Nur das Programmjahr 2025 auswählen
+panel_2025 <- panel[panel$jahr == 2025, ]
+
+# 3. Benötigte Variablen aus den beiden Datensätzen definieren
+nach <- panel_2025[, c(
+  "person_id",
+  "hf_hosp_rate_365",
+  "gkv_gesamtkosten_eur",
+  "beobachtungstage"
+)]
+
+nach2 <- ereigniszeit[, c("person_id", "hf_hosp_2025")]
+
+
+# 4. Klarstellen, dass die Variablen aus dem Paneldatensatz das Jahr 2025 betreffen
+names(nach) <- c(
+  "person_id",
+  "hf_hosp_rate_post_annual",
+  "gkv_gesamtkosten_post",
+  "beobachtungstage_post"
+)
+
+
+# 5. Daten anhand der Personen-ID miteinander verbinden
+#    all.x = TRUE: alle Personen aus dem Baseline-Datensatz behalten
+analyse <- merge(stamm, nach, by = "person_id", all.x = TRUE)
+
+analyse <- merge(analyse, nach2, by = "person_id", all.x = TRUE)
+
+# Ändern der Reihenfolge
+analyse <- analyse |>
+  relocate(hf_hosp_2025, hf_hosp_rate_post_annual, .after = hf_hosp_2024)
+
+# 6. Sicherstellen, dass jede Person genau einmal vorkommt
+if (nrow(analyse) != nrow(stamm)) {
+  stop("Nach dem Zusammenführen stimmt die Anzahl der Personen nicht.")
+}
+
+if (any(is.na(analyse))) {
+  stop("Im Analysedatensatz fehlen Werte. Bitte den Datenimport prüfen.")
+}
+
+if (any(analyse$beobachtungstage_post <= 0)) {
+  stop("Alle Personen benötigen eine positive Beobachtungszeit.")
+}
+
+if (!all(analyse$teilnahme %in% c(0, 1))) {
+  stop("Die Programmteilnahme muss mit 0 oder 1 kodiert sein.")
+}
+
+# 7. Lesbare Gruppennamen für Tabellen und Grafiken erstellen
+# Aus der num. Variable teilnahme eine neue Faktorvariable erstellen
+analyse$gruppe <- factor(
+  analyse$teilnahme,
+  levels = c(0, 1),
+  labels = c("Kontrolle", "Telemonitoring")
+)
+
+# 8. Sortierung der Variablen ändern
+analyse <- analyse |>
+  relocate(gruppe, .after = teilnahme)
+
+
+analyse <- analyse |>
+  relocate(person_id, hf_hosp_2023, hf_hosp_2024, hf_hosp_2025, hf_hosp_rate_post_annual, beobachtungstage_post, teilnahme, gruppe)
+```
+
+**Warum `merge()`?** Die Baseline- und die Paneldatei enthalten jeweils die Variable `person_id`. Über diese gemeinsame ID lassen sich die Angaben zu derselben Person zusammenführen. Mit `all.x = TRUE` behalten wir alle Baseline-Personen; die anschließenden Prüfungen zeigen, ob für jemanden Angaben aus dem Jahr 2025 fehlen.
+
+## Variablenlabels und Codebook erstellen
+
+```{r}
+
+# Datenwörterbuch importieren
+woerterbuch <- read.csv(
+  file.path(ordner_daten, "datenwoerterbuch.csv"),
+  fileEncoding = "UTF-8"
+)
+
+# Doppelte Einträge entfernen
+woerterbuch <- woerterbuch[!duplicated(woerterbuch$variable), ]
+
+# Variablennamen und deutsche Bezeichnungen verknüpfen
+labels <- setNames(woerterbuch$deutsche_bezeichnung,
+  woerterbuch$variable)
+
+# Umbenannte Variablen aus dem Panel berücksichtigen
+post_variablen <- c(
+  hf_hosp_rate_post_annual = "hf_hosp_rate_365",
+  gkv_gesamtkosten_post = "gkv_gesamtkosten_eur",
+  beobachtungstage_post = "beobachtungstage",
+  programmkosten_post = "programmkosten_eur"
+)
+
+# Labels für die umbenannten Variablen erzeugen
+post_labels <- labels[post_variablen]
+post_labels <- paste0(post_labels, " (Nachperiode 2025)")
+names(post_labels) <- names(post_variablen)
+
+# Alle verfügbaren Labels zusammenführen
+labels <- c(labels, post_labels)
+
+# Nur vorhandene Variablen mit gültigen Labels berücksichtigen
+labels <- labels[names(labels) %in% names(analyse)]
+labels <- labels[!is.na(labels) & nzchar(labels)]
+
+# Labels direkt dem gesamten Dataframe zuweisen
+analyse <- labelled::set_variable_labels(
+  analyse,
+  .labels = as.list(labels)
+)
+
+# Alle Variablen und ihre Labels anzeigen
+labelled::look_for(analyse) |>
+  dplyr::select(variable, label, col_type, missing) |>
+  knitr::kable(
+    col.names = c("Variable", "Variablenlabel", "Datentyp", "Fehlwerte")
+  )
+
+```
+
+
+
+# Deskriptive Analyse und Gruppenvergleich
+
+```{r}
+#| label: deskriptive tabellen
+
+options(scipen=100)
+options(digits=2)
+
+analyse |>
+  select(nyha, hf_hosp_2023, hf_hosp_2024, hf_hosp_2025, hf_hosp_rate_post_annual, diabetes, hypertonie, copd, niereninsuffizienz) |>
+  explore:: describe()
+
+analyse |>
+  select(nyha, hf_hosp_2023, hf_hosp_2024, hf_hosp_2025, hf_hosp_rate_post_annual, diabetes, hypertonie, copd, niereninsuffizienz) |>
+  sumtable(out='return', digits = 3)
+```
+
+Neben der Anzahl der Hospitalisierungen pro Jahr pro Person berechnen wir die 
+annualisierte Hospitalisierungsrate.
+Die Annualisierung ermöglicht den Vergleich unterschiedlicher Beobachtungszeiten, 
+kann aber bei kurzen Zeiträumen sehr große Werte erzeugen.
+
+Bsp: Eine Person hatte zwei Krankenhausaufnahmen innerhalb von 180 Beobachtungstagen 
+(und verstarb dann oder wurde nicht weiter beobachtet). 
+Ihre annualisierte Hospitalisierungsrate beträgt = (2/180) \* 365 = 4,06 
+Das bedeutet nicht, dass die Person tatsächlich 4,06 Krankenhausaufnahmen hatte. 
+Beobachtet wurden lediglich zwei Aufnahmen. Die Zahl 4,06 beschreibt die auf ein Jahr 
+hochgerechnete Ereignishäufigkeit.
+
+**Wichtig:** Der Durchschnitt einzelner annualisierter Personenraten ist nicht 
+notwendigerweise identisch mit der gepoolten Ereignisrate 
+(alle Ereignisse geteilt durch die gesamte Beobachtungszeit).
+
+```{r}
+#| label: vergleich
+
+library(dplyr)
+
+vergleich <- analyse |>
+  group_by(gruppe) |>
+  summarise(
+    N = n(),
+    Alter = mean(alter_2025),
+    nyha_median = median(nyha),
+    diabetes_pc = 100*mean(diabetes),
+    hypertonie_pc = 100*mean(hypertonie),
+    copd_pc = 100*mean(copd),
+    niereninsuffizienz_pc = 100*mean(niereninsuffizienz),
+    hf_hosp_2023 = mean(hf_hosp_2023),
+    hf_hosp_2024 = mean(hf_hosp_2024),
+    hf_hosp_2025 = mean(hf_hosp_2025),
+    hf_hosp_rate_post_annual = mean(hf_hosp_rate_post_annual),
+    .groups = "drop"
+  )
+
+knitr::kable(vergleich, digits = 2,
+  caption = "Mittelwerte nach Studiengruppe")
+
+
+```
+
+**Verständnisfrage**: Warum ist eine höhere Hospitalisierungsrate bei Teilnehmenden kein Beleg für Programmversagen? 
+Vergleiche dafür NYHA (Herzinsuffizienz-Schweregrad) und hf_hosp_2024 (frühere stationäre Aufnahmen).
+
+```{r}
+ggplot(analyse, aes(x = gruppe, y = hf_hosp_rate_post_annual)) +
+  geom_boxplot(outlier.alpha = 0.3) +
+  labs(x = "Studiengruppe", y = "HF-Aufnahmen pro 365 beobachtete Tage",
+    title = "Unadjustierter Vergleich der Hospitalisierungsraten") + theme_minimal()
+
+```
+Interpretation: Das Boxplot zeigt, dass es in der Interventionsgruppe extreme Ausreißer gibt!
+
+
+
+# OLS Regression
+
+Wir beginnen mit einer unadjustierten linearen Regression. 
+Für die Regressionsadjustierung verwenden wir ausschließlich Informationen, 
+die bereits vor dem Programmstart vorlagen. 
+Insbesondere kontrollieren wir nicht für spätere Krankenhausaufnahmen oder Programmkosten.
+
+Der `risiko_score` fasst prognostische Informationen zusammen und kann mit einzelnen Kovariaten korreliert sein. 
+Er wird hier wegen möglicher Kollinearität ausgeschlossen. 
+Die Einladungsschwelle `einladung_ab_70` lag ebenfalls vor dem Programmstart; 
+und ist für den Teilnahmeprozess relevant. 
+Für die Regressionsadjustierung verwenden wir somit nur ausgewählte klinische, demografische 
+und versorgungsbezogene Ausgangsmerkmale. 
+Den zusammengesetzten risiko_score und die daraus abgeleitete Einladungsschwelle 
+einladung_ab_70 nehmen wir bewusst nicht zusätzlich auf. 
+Die Regression dient damit als Modell zur Adjustierung anhand der ausgewählten Einzelmerkmale. 
+Der Einfluss der Einladungsschwelle wird im späteren Regression-Discontinuity-Modul gesondert untersucht.
+
+```{r}
+#| label: unadjustiert-modell
+
+modell_roh <- feols(hf_hosp_rate_post_annual ~ teilnahme, data = analyse, vcov = "hetero")
+
+etable(modell_roh, digits = 3)
+
+```
+
+Der Koeffizient `teilnahme` entspricht hier der **absoluten Differenz** der 
+mittleren annualisierten Hospitalisierungszahlen zwischen den Teilnehmenden und der Kontrollgruppe. 
+Heteroskedastizitätsrobuste Standardfehler berücksichtigen bestimmte Unterschiede in der Fehlervarianz; 
+sie beseitigen aber **kein Confounding**.
+
+Ein positiver Koeffizient bedeutet, dass Programmteilnehmende häufiger hospitalisiert werden. 
+Das heißt jedoch nicht zwangsläufig, dass das Programm unwirksam oder schädlich ist: 
+Personen mit schwererer Erkrankung und höherem Hospitalisierungsrisiko nehmen häufiger am Programm teil. 
+Diese systematischen Unterschiede zwischen den Gruppen können das Ergebnis verzerren (Confounding by Indication).
+
+Zwischenfazit: Der unadjustierte Vergleich zeigt zunächst nur einen Zusammenhang 
+(bzw. in diesem Fall keinen signifikanten Zusammenhang), keinen kausalen Programmeffekt. 
+Um die tatsächliche Wirkung des Telemonitorings abzuschätzen, 
+müssen wir die Unterschiede zwischen den Gruppen berücksichtigen.
+
+
+```{r}
+#| label: ols-modelle
+
+# Umfangreichere Adjustierung:
+modell_adjustiert <- feols(hf_hosp_rate_post_annual ~ teilnahme 
+                    + alter_2025 + geschlecht +
+                    nyha + lvef_prozent + diabetes + niereninsuffizienz + copd +
+                  hypertonie + digitalzugang + laendlich + hf_hosp_2023 + hf_hosp_2024 +
+                  log1p(gkv_kosten_2024_eur),
+                  data = analyse, vcov = "hetero")
+
+etable(modell_roh,   modell_adjustiert, digits = 3)
+```
+
+**Interpretation:** Der adjustierte OLS-Koeffizient beschreibt die mittlere absolute Differenz 
+in **HF-Aufnahmen pro 365 Tage** (annualsisierte Hospitalisierungsrate) zwischen Personen mit denselben
+im Modell berücksichtigten Kovariaten. 
+
+Fazit: Nach Berücksichtigung der Unterschiede zwischen den Gruppen zeigt sich ein 
+statistisch signifikanter negativer Zusammenhang zwischen der Programmteilnahme und der 
+annualisierten Hospitalisierungsrate. Der geschätzte Beta-Koeffizient beträgt 
+`r round(coef(modell_adjustiert)[["teilnahme"]], 3)`.
+
+```{r}
+coef(modell_adjustiert)["teilnahme"]
+```
+
+Das bedeutet: Bei vergleichbarem Alter, Erkrankungsschwere, Vorerkrankungen und weiteren 
+berücksichtigten Ausgangsmerkmalen weisen Teilnehmende des Telemonitoring-Programms 
+durchschnittlich 0,17 Herzinsuffizienz-Hospitalisierungen weniger (pro 365 Beobachtungstage) auf als Nichtteilnehmende.
+
+Auch die Erkrankungsschwere spielt eine Rolle: Eine höhere NYHA-Klasse und eine bestehende 
+Niereninsuffizienz gehen mit höheren Hospitalisierungsraten einher, 
+während eine bessere Herzpumpfunktion (LVEF) mit niedrigeren Raten verbunden ist.
+
+Fazit: Anders als im unadjustierten Vergleich deutet das Ergebnis nach Kontrolle der beobachteten 
+Unterschiede auf einen nützlichen Programmeffekt hin. Eine kausale Interpretation ist 
+jedoch nur gerechtfertigt, wenn keine wesentlichen unbeobachteten Störfaktoren verbleiben 
+und das Regressionsmodell angemessen spezifiziert ist.
+
+# Poisson-Regression
+
+Hospitalisierungen sind **Zählereignisse**: Eine Person kann im Beobachtungszeitraum keine, 
+eine oder mehrere Aufnahmen haben. Daher verwenden wir zusätzlich eine Poisson-Regression mit Log-Link. 
+Die Poisson-Regression verwendet man insbesondere, 
+wenn die abhängige Variable die Anzahl von Ereignissen beschreibt, beispielsweise: 
+- Anzahl der Krankenhausaufnahmen einer Person innerhalb eines Jahres. 
+- Anzahl der Arztbesuche innerhalb eines Quartals. 
+- Anzahl der Notaufnahmebesuche innerhalb eines Beobachtungszeitraums. 
+
+In unserem Fall wollen wir untersuchen: Wie verändert die Teilnahme am Telemonitoringprogramm 
+die Häufigkeit von Krankenhausaufnahmen wegen Herzinsuffizienz, wenn wir Unterschiede in den 
+Ausgangsmerkmalen berücksichtigen? 
+Die abhängige Variable ist hf_hosp_2025, also die tatsächliche Anzahl der HF-Hospitalisierungen im Jahr 2025. 
+Das Poisson-Modell ist hierfür besonders geeignet, 
+weil es nichtnegative Ereigniszahlen modelliert und auch unterschiedliche Beobachtungszeiten 
+berücksichtigen kann. Warum nicht einfach eine lineare Regression? Bei der vorherigen 
+**linearen Regression** haben wir die **annualisierte Hospitalisierungsrate** verwendet. 
+(Diese kann extreme Werte annehmen, wie beispielsweise 73 bei einer Hospitalisierung innerhalb
+von fünf Beobachtungstagen.) 
+Die Poisson-Regression verwendet stattdessen die tatsächlich 
+beobachtete Anzahl der Hospitalisierungen und berücksichtigt die Beobachtungsdauer gesondert. 
+In deinem Skript geschieht dies durch: offset = log(beobachtungstage_post / 365). 
+Dadurch vergleichen wir nicht einfach die absolute Anzahl der Hospitalisierungen, 
+sondern die erwartete Häufigkeit bezogen auf dieselbe Beobachtungszeit.
+
+Mit dem Offset `log(beobachtungstage_post / 365)` berücksichtigen wir, 
+dass sich die Beobachtungsdauer zwischen Personen unterscheiden kann. 
+Die Exponentiation des Koeffizienten von `teilnahme` ergibt ein **Incidence Rate Ratio (IRR)**. 
+Ein IRR von 0,80 entspräche einer um 20 % niedrigeren Hospitalisierungsrate **pro Personenjahr**, 
+nicht einem um 20 Prozentpunkte niedrigeren Anteil hospitalisierter Personen.
+
+```{r}
+#| label: poisson-modelle
+
+# Aus Platzgründen speichern wir die Regressionsformel als Vektor
+formel_aufnahmen <- hf_hosp_2025 ~ teilnahme + alter_2025 +
+  geschlecht + nyha + lvef_prozent + diabetes + niereninsuffizienz +
+  copd + hypertonie + digitalzugang + laendlich + hf_hosp_2023 +
+  hf_hosp_2024 + log1p(gkv_kosten_2024_eur) + offset(log(beobachtungstage_post / 365))
+
+modell_poisson <- fepois(formel_aufnahmen, data = analyse, vcov = "hetero")
+
+etable(modell_poisson, digits = 3)
+
+
+exp(coef(modell_poisson)["teilnahme"])
+
+# IRR und 95-%-Konfidenzintervall für die Programmteilnahme
+koeffizient_poisson <- coef(modell_poisson)[["teilnahme"]]
+ki_poisson <- unlist(confint(modell_poisson)["teilnahme", ])
+
+irrs <- data.frame(
+  IRR = exp(koeffizient_poisson),
+  KI_unten = exp(ki_poisson[1]),
+  KI_oben = exp(ki_poisson[2]))
+
+kable(irrs, digits = 3, caption = "Adjustiertes IRR der Programmteilnahme")
+
+```
+
+Die Intervalle beruhen auf heteroskedastizitätsrobusten Standardfehlern. 
+
+Das Poisson-Modell liefert ein interessantes Ergebnis: Nach Berücksichtigung der Unterschiede zwischen 
+den Versicherten ist die Teilnahme am Telemonitoring mit einer um etwa 22 % niedrigeren Herzinsuffizienz-Hospitalisierungsrate verbunden (p \< 0,001).
+
+Das ist der wichtigste Unterschied zur linearen Regression.
+Bei einer linearen Regression kann ein Koeffizient von −0,248 unmittelbar als absolute 
+Differenz von −0,248 Einheiten interpretiert werden.
+Bei einer Poisson-Regression mit logarithmischer Linkfunktion ist das nicht zulässig.
+
+```{r}
+# Der Koeffizient beträgt
+coef(modell_poisson)[["teilnahme"]]
+```
+Der Koeffizient wird zunächst exponentiert:
+Das Ergebnis ist die Incidence Rate Ratio (IRR), also das Verhältnis zweier Ereignisraten.
+```{r}
+# IRR in %
+((exp(coef(modell_poisson)["teilnahme"]))-1)*100
+```
+
+Die erwartete Hospitalisierungsrate ist bei Programmteilnehmenden rund 22 % niedriger 
+als bei vergleichbaren Nichtteilnehmenden.
+
+Zum Verständnis: Wenn die Kontrollgruppe bei bestimmten Ausgangsmerkmalen eine erwartete 
+Rate von 1,0 Hospitalisierungen pro Personenjahr hätte, würde das Modell für Programmteilnehmende 
+mit denselben Merkmalen eine Rate von ungefähr 0,78 erwarten.
+Das ist ein relativer Unterschied, keine absolute Reduktion um 0,248 Hospitalisierungen und 
+auch keine Verringerung des Risikos, mindestens einmal hospitalisiert zu werden, um 22 Prozentpunkte.
+
+| Variable | Lineare Regression | Poisson-Regression |
+|:-----------------------|:-----------------------|:-----------------------|
+| Abhängige Variable | Annualisierte Hospitalisierungsrate | Anzahl der Hospitalisierungen |
+| Teilnahmekoeffizient | −0,170 | −0,248 |
+| Interpretation | 0,17 weniger Hospitalisierungen pro 365 Tage | 22 % niedrigere Hospitalisierungsrate |
+| Effektmaß | Absolute Differenz | Relative Rate (IRR = 0,78) |
+| Beobachtungsdauer | Bereits in der annualisierten Rate enthalten | Über Offset berücksichtigt |
+
+Die Koeffizienten sind nicht direkt miteinander vergleichbar, weil die Modelle 
+unterschiedliche Effektmaße verwenden.
+Meine Empfehlung für unseren Evaluationsfall: Die Poisson-Regression mit Offset ist als 
+Ausgangsmodell für die Anzahl der Hospitalisierungen besonders geeignet.
+Wir sollten aber noch auf Overdispersion prüfen und gegebenenfalls eine 
+Negativ-Binomial-Regression ergänzen.
+Danach können wir mit PSM und IPTW gezielt untersuchen, wie robust der geschätzte 
+Programmeffekt gegenüber der nicht zufälligen Teilnahme ist.
+
+
+
+## Überdispersion und Negativ-Binomial-Sensitivität
+
+Bei einer einfachen Poisson-Verteilung stimmen bedingter Erwartungswert und bedingte Varianz überein. 
+In Gesundheitsdaten streuen die Krankenhausaufnahmen häufig stärker (*Überdispersion*). 
+Deshalb betrachten wir eine Pearson-Diagnostik und vergleichen danach die Poisson- mit einer Negativ-Binomial-Regression.
+
+```{r}
+
+#| label: ueberdispersion
+
+# 1. Poisson-Modell schätzen
+
+modell_poisson <- fepois(formel_aufnahmen, data = analyse, vcov = "hetero")
+
+# 2. Überdispersion des Poisson-Modells prüfen
+pearson_residuen <- residuals(modell_poisson, type = "pearson")
+
+pearson_dispersion <- sum(pearson_residuen^2) / df.residual(modell_poisson)
+
+kable(data.frame(Pearson_Dispersion = pearson_dispersion),
+  digits = 2, caption = "Pearson-Dispersion des Poisson-Modells")
+
+```
+**Interpretation**: Die Pearson-Dispersion liegt bei 0,98. 
+Ein Wert nahe 1 ist mit der Poisson-Varianzannahme vereinbar. 
+und deutet darauf hin, dass keine Überdispersion vorliegt.
+Deutlich größere Werte weisen auf mögliche Überdispersion hin und das Poisson Model geeignet ist.
+
+```{r}
+
+# Poisson- und Negativ-Binomial-Modell schätzen
+# Beide verwenden dieselben Kovariaten und robusten Standardfehler.
+
+modell_poisson <- fepois(formel_aufnahmen, data = analyse, vcov = "hetero")
+
+modell_nb <- fenegbin(formel_aufnahmen, data = analyse, vcov = "hetero")
+
+# 3. Interventionseffekt aus beiden Modellen extrahieren
+koeffizient_poisson <- coef(modell_poisson)["teilnahme"]
+koeffizient_nb <- coef(modell_nb)["teilnahme"]
+
+ki_poisson <- unlist(confint(modell_poisson)["teilnahme", ])
+ki_nb <- unlist(confint(modell_nb)["teilnahme", ])
+
+
+# 4. Rate Ratios und 95-%-Konfidenzintervalle vergleichen
+vergleich_zaehlmodelle <- data.frame(
+  Modell = c("Poisson", "Negativ-Binomial"),
+  IRR = exp(c(koeffizient_poisson, koeffizient_nb)),
+  KI_unten = exp(c(ki_poisson[1], ki_nb[1])),
+  KI_oben = exp(c(ki_poisson[2], ki_nb[2])))
+
+kable(vergleich_zaehlmodelle, digits = 3,
+  caption = "Adjustierte Rate Ratios mit robusten 95-%-Konfidenzintervallen")
+
+```
+
+**Negativ-Binomial-Sensitivität**: Ergänzend schätzen wir eine Negativ-Binomial-Regression. 
+Die Schätzung liefert einen sehr hohen Theta-Parameter sowie eine Warnmeldung zur singulären Informationsmatrix. 
+Dies deutet auf Schwierigkeiten bei der Schätzung des zusätzlichen Dispersionsparameters hin. 
+Wir dokumentieren das geschätzte IRR zu Lehrzwecken, verzichten jedoch auf die Interpretation seiner Konfidenzintervalle. 
+Die Pearson-Dispersion des Poisson-Modells liegt nahe 1 und liefert keinen deutlichen Hinweis auf Überdispersion.
+
+# Fazit und Ausblick
+
+Der Rohvergleich und die Regressionsmodelle unterscheiden sich hinsichtlich der berücksichtigten Vorbehandlungsmerkmale und 
+der Zielskala (**absolute Differenz** versus **relatives Rate Ratio**). 
+Für die Interpretation zählen Effektgröße, 
+Konfidenzintervall, Modellannahmen und die Frage nach möglichem unbeobachtetem Confounding – nicht nur die statistische Signifikanz.
