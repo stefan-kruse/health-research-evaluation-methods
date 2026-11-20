@@ -1,0 +1,689 @@
+---
+title: "Beobachtungsstudie: Propensity Score Matching und Weighting (IPTW)"
+subtitle: "Telemonitoring bei Herzinsuffizienz · Modul 02.2"
+author: "Stefan Kruse"
+lang: de
+format:
+  html:
+    theme: cosmo
+    toc: true
+    number-sections: true
+    embed-resources: true
+execute:
+  echo: true
+  warning: true
+  message: false
+---
+
+**Datenhinweis:** Sämtliche Versicherten, Krankenhausaufnahmen, Kosten und Programmteilnahmen sind **vollständig synthetisch**. Die Ergebnisse sind keine empirische Evidenz für die Wirksamkeit von Telemonitoring.
+
+# Forschungsfrage und Einordnung
+
+**Forschungsfrage:** Wie verändert sich der geschätzte Zusammenhang zwischen Telemonitoring und HF-bedingten Krankenhausaufnahmen, wenn wir die Interventions- und Kontrollgruppe anhand ihrer beobachteten Ausgangsmerkmale vergleichbarer machen?
+
+Im vorangehenden Modul **02.1 (Gruppenvergleiche und Regressionsanalysen)** haben wir Ausgangsunterschiede direkt im Outcome-Modell berücksichtigt. Hier gehen wir anders vor: Wir schätzen zunächst die **Wahrscheinlichkeit der Programmteilnahme anhand der Ausgangsmerkmale** (*Propensity Score*, PS). Anschließend verwenden wir diese Wahrscheinlichkeit, um vergleichbare Personen zusammenzuführen (*Matching*) oder Beobachtungen unterschiedlich zu gewichten (*Inverse Probability of Treatment Weighting*, IPTW).
+
+-   **Matching (ATT):** Wir untersuchen die annualisierte Zahl der HF-Hospitalisierungen für die gematchten Programmteilnehmenden. Wenn aufgrund zu geringer Ähnlichkeiten Personen ohne Match ausscheiden, bezieht sich der geschätzte Effekt zunächst nur auf diese **gematchte Teilgruppe**.
+-   **IPTW (ATE):** Die Gewichtung soll unter den erforderlichen Annahmen den durchschnittlichen Effekt für die gesamte untersuchte Population (hier: 2.000 synthetische Versicherte) schätzen.
+
+PSM und IPTW können beobachtete Unterschiede zwischen Interventions- und Kontrollgruppe reduzieren. Damit die geschätzten Effekte kausal interpretiert werden können, müssen jedoch mehrere Annahmen gelten: Erstens dürfen nach Berücksichtigung der relevanten Ausgangsmerkmale keine unbehandelten Confounder verbleiben (bedingte Austauschbarkeit). Zweitens müssen für vergleichbare Patienten grundsätzlich beide Behandlungsoptionen möglich sein (Positivität). Drittens muss die Intervention eindeutig definiert sein und das beobachtete Ergebnis dem tatsächlich erhaltenen Behandlungszustand entsprechen (Konsistenz). Viertens müssen die verwendeten statistischen Modelle angemessen spezifiziert sein. Wir prüfen deshalb insbesondere die Überlappung der Propensity Scores und die Balance der beobachteten Kovariaten. Diese Diagnostik kann die kausalen Annahmen plausibilisieren, aber nicht vollständig beweisen.
+
+Wie in Modul 02.1 unterscheiden wir die **absolute Differenz der annualisierten individuellen Hospitalisierungszahlen** von einem **relativen Incidence Rate Ratio (IRR)** aus einer Poisson-Regression. Das gemeinsame Beobachtungsjahr ist **2025**; die Jahre 2023 und 2024 liefern Ausgangsmerkmale vor Programmstart.
+
+# Pakete und Daten einlesen
+
+## Benötigte R-Pakete
+
+Einmalig in der R-Konsole installieren, falls erforderlich:
+
+``` r
+# install.packages(c("dplyr", "ggplot2", "knitr", "labelled",
+#                    "MatchIt", "cobalt", "fixest", "broom"))
+```
+
+```{r}
+#| label: pakete-psm
+library(dplyr)       # Datenaufbereitung und Gruppentabellen
+library(ggplot2)     # Grafiken
+library(knitr)       # Tabellen
+library(labelled)    # Variablenlabels
+library(MatchIt)     # Propensity Score Matching
+library(cobalt)      # Diagnostik der Kovariatenbalance
+library(fixest)      # Regressionsmodelle mit robusten Standardfehlern
+library(broom)
+
+set.seed(2026)      # Reproduzierbare Zuteilung bei Matching-Gleichständen
+```
+
+
+# Datenimport
+
+Wir verwenden genau dieselben Dateien wie in vorherigen Regressionsanalyse:
+
+-   `01_versicherte_baseline.csv`: Ausgangsmerkmale und Programmteilnahme;
+-   `02_versichertenjahre_panel.csv`: Hospitalisierungsraten, Kosten und Beobachtungstage nach Kalenderjahr;
+-   `03_ereigniszeit_2025.csv`: unter anderem die Zahl der HF-Aufnahmen 2025;
+-   `datenwoerterbuch.csv`: deutsche Variablenbezeichnungen für beide Module.
+
+Die Dateien liegen unter `data/` im Repository-Hauptverzeichnis. Dieses Dokument befindet sich unter `analysis/02-observational-causal-inference/`; deshalb verweist `../../data` auf den gemeinsamen Datenordner.
+
+```{r}
+#| label: daten-einlesen-psm
+ordner_daten <- "../../data"
+
+datei_baseline <- file.path(ordner_daten, "01_versicherte_baseline.csv")
+datei_panel <- file.path(ordner_daten, "02_versichertenjahre_panel.csv")
+datei_ereigniszeit_2025 <- file.path(ordner_daten, "03_ereigniszeit_2025.csv")
+datei_woerterbuch <- file.path(ordner_daten, "datenwoerterbuch.csv")
+
+# Vor dem Import alle benötigten Dateien prüfen.
+dateien <- c(datei_baseline, datei_panel,
+             datei_ereigniszeit_2025, datei_woerterbuch)
+if (!all(file.exists(dateien))) {
+  stop("Folgende Dateien fehlen: ",
+       paste(dateien[!file.exists(dateien)], collapse = ", "))
+}
+
+stamm <- read.csv(datei_baseline, stringsAsFactors = FALSE)
+panel <- read.csv(datei_panel, stringsAsFactors = FALSE)
+ereigniszeit <- read.csv(datei_ereigniszeit_2025, stringsAsFactors = FALSE)
+
+cat("Personen in den Baseline-Daten:", nrow(stamm), "\n")
+cat("Personenjahre im Panel:", nrow(panel), "\n")
+print(table(panel$jahr))
+```
+
+## Analysedatensatz für 2025 erstellen
+
+Wie in Modul 02.1 soll `analyse` **eine Zeile je Person** enthalten. Wir verbinden die Ausgangsdaten mit der annualisierten Rate und der Beobachtungszeit aus dem Panel sowie der Anzahl der HF-Aufnahmen aus der Ereigniszeitdatei. Beide Outcomes beziehen sich auf 2025.
+
+```{r}
+#| label: daten-zusammenfuehren-psm
+
+# Jede Person beziehungsweise Person-Jahr-Kombination muss eindeutig sein.
+stopifnot(!anyDuplicated(stamm$person_id))
+stopifnot(!anyDuplicated(panel[c("person_id", "jahr")]))
+stopifnot(!anyDuplicated(ereigniszeit$person_id))
+
+panel_2025 <- panel[panel$jahr == 2025, ]
+
+# Ausgangsvariablen um die 2025-Ergebnisse ergänzen.
+nach <- panel_2025[, c(
+  "person_id", "hf_hosp_rate_365", "gkv_gesamtkosten_eur",
+  "beobachtungstage"
+)]
+names(nach) <- c(
+  "person_id", "hf_hosp_rate_post_annual",
+  "gkv_gesamtkosten_post", "beobachtungstage_post"
+)
+
+nach2 <- ereigniszeit[, c("person_id", "hf_hosp_2025")]
+
+analyse <- merge(stamm, nach, by = "person_id", all.x = TRUE)
+analyse <- merge(analyse, nach2, by = "person_id", all.x = TRUE)
+
+# Lesbare Gruppenbezeichnungen für Tabellen und Grafiken.
+analyse$gruppe <- factor(
+  analyse$teilnahme,
+  levels = c(0, 1),
+  labels = c("Kontrolle", "Telemonitoring")
+)
+
+# Reihenfolge der zentralen Variablen wie in Modul 02.1.
+analyse <- analyse |>
+  relocate(person_id, hf_hosp_2023, hf_hosp_2024,
+           hf_hosp_2025, hf_hosp_rate_post_annual,
+           beobachtungstage_post, teilnahme, gruppe)
+
+# Integritätsprüfung: ein vollständiger Datensatz pro Person.
+stopifnot(nrow(analyse) == nrow(stamm))
+stopifnot(!anyNA(analyse))
+stopifnot(all(analyse$teilnahme %in% c(0, 1)))
+stopifnot(all(analyse$beobachtungstage_post > 0))
+
+# Die beiden Datenquellen müssen dieselbe 2025-Aufnahmezahl ausweisen.
+pos_panel <- match(analyse$person_id, panel_2025$person_id)
+stopifnot(!anyNA(pos_panel))
+stopifnot(all(analyse$hf_hosp_2025 ==
+              panel_2025$hf_hospitalisierungen[pos_panel]))
+stopifnot(all(analyse$beobachtungstage_post ==
+              panel_2025$beobachtungstage[pos_panel]))
+
+# Die Programmzuordnung muss mit der Ereigniszeitdatei übereinstimmen.
+pos_ereignis <- match(analyse$person_id, ereigniszeit$person_id)
+stopifnot(!anyNA(pos_ereignis))
+stopifnot(all(analyse$teilnahme == ereigniszeit$teilnahme[pos_ereignis]))
+
+kable(
+  as.data.frame(table(Gruppe = analyse$gruppe)),
+  caption = "Personen nach Programmteilnahme"
+)
+```
+
+## Variablenlabels aus dem Datenwörterbuch übernehmen
+
+Wir verwenden dieselbe Vorgehensweise wie in Modul 02.1.
+
+```{r}
+#| label: variablenlabels-psm
+woerterbuch <- read.csv(datei_woerterbuch, fileEncoding = "UTF-8")
+woerterbuch <- woerterbuch[!duplicated(woerterbuch$variable), ]
+
+labels <- setNames(
+  woerterbuch$deutsche_bezeichnung,
+  woerterbuch$variable
+)
+
+# Originalnamen der umbenannten Panelvariablen zuordnen.
+post_variablen <- c(
+  hf_hosp_rate_post_annual = "hf_hosp_rate_365",
+  gkv_gesamtkosten_post = "gkv_gesamtkosten_eur",
+  beobachtungstage_post = "beobachtungstage",
+  programmkosten_post = "programmkosten_eur"
+)
+
+# Fehlende Einträge im Wörterbuch nicht als "NA (Nachperiode ...)" übernehmen.
+vorhandene_post_variablen <- post_variablen[
+  post_variablen %in% names(labels)
+]
+post_labels <- labels[vorhandene_post_variablen]
+post_labels <- paste0(post_labels, " (Nachperiode 2025)")
+names(post_labels) <- names(vorhandene_post_variablen)
+labels <- c(labels, post_labels)
+labels <- labels[names(labels) %in% names(analyse)]
+labels <- labels[!is.na(labels) & nzchar(labels)]
+
+analyse <- labelled::set_variable_labels(
+  analyse,
+  .labels = as.list(labels)
+)
+
+# Ergänzende Beschreibung für die neu erzeugte Gruppierungsvariable.
+labelled::var_label(analyse$gruppe) <- "Studiengruppe"
+
+# Kontrolle (Auszug): vorhandene Labels und ihre Variablen.
+labelled::look_for(analyse) |>
+  select(variable, label) |>
+  head(12) |>
+  kable(caption = "Auszug aus dem Datenwörterbuch")
+```
+
+# Propensity Score Berechnung: Teilnahmewahrscheinlichkeit
+
+## Modell und bewusst gewählte Ausgangsmerkmale
+
+Wir modellieren die nicht randomisierte Programmteilnahme anhand **vor dem Programmstart beobachteter** Merkmale. Die Hauptspezifikation verwendet die gleichen Einzelmerkmale wie die adjustierte Regression in Modul 02.1: Alter, Geschlecht, NYHA, LVEF, Vorerkrankungen, digitalen Zugang, ländlichen Wohnort, frühere HF-Aufnahmen und Vorjahreskosten.
+
+**Harmonisierung mit Modul 02.1:** `risiko_score` und `einladung_ab_70` bleiben wie dort **bewusst außerhalb des Hauptmodells**, obwohl die Einladungsschwelle einen sehr starken Einfluss auf die Teilnahme hat und ihre Berücksichtigung den geschätzten Overlap verringern kann. Ihre Auslassung ist deshalb **keine Garantie für bessere kausale Identifikation**: Beide Variablen gehören zum dokumentierten Auswahlprozess. Wenn darüber zusätzliche Selektion in die Programmteilnahme stattfindet, kann die Schätzung weiterhin verzerrt sein. Dies ist eine Grenze der hier gewählten Spezifikation; die Einladungsschwelle wird im gesonderten RD-Modul untersucht.
+
+```{r}
+#| label: propensity-score-modell
+
+# Wir speichern die Regressionsformel als Vektor
+ps_formel <- teilnahme ~ alter_2025 + geschlecht + nyha +
+  lvef_prozent + diabetes + niereninsuffizienz + copd +
+  hypertonie + digitalzugang + laendlich + hf_hosp_2023 +
+  hf_hosp_2024 + log1p(gkv_kosten_2024_eur)
+
+# und schätzen eine logistische Regression
+ps_modell <- glm(ps_formel, family = binomial(link = "logit"), data = analyse)
+
+# Dann berechnen wir die fitted/ predicted values (y_hat) als vorhergesagte Wahrscheinlichkeiten.
+analyse$ps <- predict(ps_modell, type = "response")
+labelled::var_label(analyse$ps) <- "Geschätzte Teilnahmewahrscheinlichkeit"
+
+stopifnot(all(is.finite(analyse$ps)))
+stopifnot(all(analyse$ps > 0 & analyse$ps < 1))
+
+```
+
+Der Logit-Koeffizient beschreibt eine Veränderung der **Log-Odds** der Teilnahme. Nach Exponentiation erhalten wir **Odds Ratios (OR)**: OR = 1 bedeutet keine Änderung der Odds, OR über 1 höhere Odds und OR unter 1 niedrigere Odds. Eine OR von 1,47 steht beispielsweise für 47 % höhere **Odds**, **nicht** für 47 Prozentpunkte höhere Teilnahmewahrscheinlichkeit. Die mit `predict(..., type = "response")` berechneten Propensity Scores (PS) sind dagegen tatsächliche **Wahrscheinlichkeiten** zwischen 0 und 1.
+
+```{r}
+#| label: propensity-score-odds-ratios
+
+# Logistisches Modell zur Erklärung der Programmteilnahme (Log Odds)
+knitr::kable(broom::tidy(ps_modell), digits = 3,
+             caption = "Logistisches Teilnahmemodell: Log Odds")
+
+# Logistisches Modell zur Erklärung der Programmteilnahme (Odds Ratio)
+knitr::kable(broom::tidy(ps_modell, exponentiate = TRUE,conf.int = TRUE), digits = 3,
+             caption = "Logistisches Teilnahmemodell: Odds Ratios und 95-%-KI")
+
+```
+
+## Overlap (Common Support) prüfen
+
+**Zentrale Frage:** Gibt es für Personen mit hoher geschätzter Teilnahmewahrscheinlichkeit auch vergleichbare Kontrollpersonen – und umgekehrt? In Bereichen, in denen fast ausschließlich eine Gruppe vertreten ist, werden Matching und Gewichtung unsicher. Eine gute Überschneidung der PS-Dichten ist hilfreich, ersetzt aber keine Kontrolle der **einzelnen Kovariaten** nach Matching oder IPTW.
+
+```{r}
+#| label: propensity-score-overlap
+
+ps_uebersicht <- analyse |>
+  group_by(gruppe) |>
+  summarise(
+    patienten = n(),
+    minimum = min(ps),
+    median = median(ps),
+    maximum = max(ps),
+    ps_unter_010 = sum(ps < 0.10),
+    ps_ueber_090 = sum(ps > 0.90),
+    .groups = "drop"
+  )
+
+kable(ps_uebersicht, digits = 3,
+      caption = "Verteilung der geschätzten Propensity Scores")
+
+ggplot(analyse, aes(x = ps, fill = gruppe)) +
+  geom_density(alpha = 0.35) +
+  labs(
+    title = "Overlap der geschätzten Teilnahmewahrscheinlichkeiten",
+    x = "Propensity Score (Wahrscheinlichkeit)",
+    y = "Dichte",
+    fill = "Studiengruppe"
+  ) +
+  theme_minimal()
+```
+
+**Interpretation:** Die Overlap-Analyse ist einer der wichtigsten Schritte vor dem Propensity Score Matching (PSM) und dem Inverse Probability of Treatment Weighting (IPTW). Die zentrale Frage lautet: Gibt es für die Programmteilnehmenden genügend vergleichbare Nichtteilnehmende – und umgekehrt? Nur wenn sich die Gruppen hinsichtlich ihrer Ausgangsmerkmale ausreichend überschneiden, können wir sie sinnvoll miteinander vergleichen.
+
+Wir suchen also idealerweise nach einem hohen Overlap der beiden Kurven, sodass Personen aus beiden Gruppen hinsichtlich ihrer im Propensity-Score-Modell berücksichtigten Merkmale eine ähnliche Ausgangssituation haben könnten.. In Bereichen mit vielen Programmteilnehmenden, aber kaum Kontrollpersonen, wird ein sinnvoller Vergleich schwierig. Dasselbe gilt umgekehrt. Das dahinterstehende Prinzip heißt Common Support beziehungsweise Positivity: Für vergleichbare Ausgangsmerkmale muss grundsätzlich sowohl eine Teilnahme als auch eine Nichtteilnahme möglich sein.
+
+Ohne risiko_score und einladung_ab_70 überlappen sich die geschätzten Teilnahmewahrscheinlichkeiten der Kontroll- und Telemonitoringgruppe deutlich stärker. Das bedeutet, dass es mehr Personen mit ähnlicher geschätzter Teilnahmewahrscheinlichkeit in beiden Gruppen gibt, was Matching und Gewichtung grundsätzlich erleichtert. Die bessere Überlappung ist vor allem dadurch erklärbar, dass einladung_ab_70 ein sehr starker Prädiktor der Teilnahme ist und die Gruppen im ursprünglichen Modell stark voneinander trennt. Ein besserer Overlap bedeutet jedoch nicht automatisch, dass das Propensity-Score-Modell auch inhaltlich überlegen ist. Entscheidend ist, ob nach dem Matching oder der Gewichtung eine gute Balance der relevanten Ausgangsmerkmale erreicht wird.
+
+# Propensity Score Matching: gematchter ATT
+
+Ziel des Propensity Score Matching ist es, Programmteilnehmende mit möglichst ähnlichen Nichtteilnehmenden zu vergleichen. Dadurch sollen systematische Unterschiede zwischen den Gruppen reduziert werden, die unsere Schätzung der Programmwirkung verzerren könnten.
+
+## Nearest-Neighbor-Matching mit Caliper
+
+Wir suchen zu jeder Programmteilnehmerin bzw. jedem Programmteilnehmer eine möglichst ähnliche Kontrollperson. Das Matching wird anhand der **gleichen Baseline-Variablen** durchgeführt, die wir gerade für den PS verwendet haben.
+
+-   `method = "nearest"`: Zuordnung des nächstgelegenen Nachbarn;
+-   `ratio = 1`: eine Kontrollperson je behandelter Person;
+-   `replace = FALSE`: jede Kontrollperson kann nur einmal verwendet werden;
+-   `caliper = 0.2`, `std.caliper = TRUE`: zulässiger Abstand von höchstens 0,2 Standardabweichungen der Matching-Distanz (hier des geschätzten Propensity Scores); dies bedeutet **nicht** 0,2 Prozentpunkte;
+-   `estimand = "ATT"`: Fokus auf die behandelte Gruppe.
+
+Die Funktion `matchit()` berechnet mit `distance = "glm"` selbst ein logistisches PS-Modell anhand derselben Formel und bestimmt für jede Person einen Propensity Score, also die anhand ihrer beobachteten Ausgangsmerkmale geschätzte Wahrscheinlichkeit, am Telemonitoring teilzunehmen; das vorherige `ps_modell` dient der transparenten Darstellung der Schätzung. Anschließend werden die Teilnehmenden mithilfe von Nearest-Neighbor-Matching mit den jeweils ähnlichsten Kontrollpersonen zusammengeführt:
+
+Die matchit-output summary zeigt diverse Balance-Indikatoren für **All** Data" und für die **Matched** Data", einschließlich der "Standardized Mean Difference". Das cobalt Paket stellt nur die (Standardized Mean) Difference für das unmatched und das matched (adjustierte) sample gegenüber.
+
+```{r}
+#| label: propensity-score-matching
+
+psm <- MatchIt::matchit(ps_formel, data = analyse,
+                      method = "nearest",   distance = "glm",   
+                      replace = FALSE,  ratio = 1,
+                      caliper = 0.2,   std.caliper = TRUE,  estimand = "ATT")
+summary(psm)
+
+cobalt::bal.tab(psm, un = TRUE)
+
+```
+
+**Ergebnis:** Von 852 Programmteilnehmenden konnten 683 Personen (80,2 %) erfolgreich mit einer Kontrollperson gematcht werden (siehe data.frame3). Damit enthält der neue Analysedatensatz 683 vergleichbare Paare beziehungsweise 1.366 Versicherte. 169 Programmteilnehmende (19,8 %) konnten nicht berücksichtigt werden, weil im Rahmen der gewählten Matching-Regeln keine geeignete Kontrollperson zugeordnet wurde. Der Ausschluss dieser Personen verbessert die Vergleichbarkeit, schränkt aber die Übertragbarkeit der Ergebnisse ein: Der später geschätzte Programmeffekt bezieht sich zunächst auf die gematchten Teilnehmenden und nicht ohne Weiteres auf alle ursprünglich behandelten Personen. D.h. der anschließend geschätzte ATT (average treatment effect of the treated) bezieht sich deshalb zunächst auf diese gematchten Teilnehmenden (ATT nach unserem Matching) und nicht automatisch auf sämtliche Programmteilnehmenden (urspünglicher ATT). Eine kleinere, vergleichbarere Stichprobe bedeutet zudem weniger statistische Information.
+
+Hat das Matching die Vergleichbarkeit verbessert? Um dies zu beurteilen, vergleichen wir die Ausgangsmerkmale vor und nach dem Matching (vergleiche hierzu data.frame1 (vorher) und data.frame2 (nachher)). Die zentrale Kennzahl ist die Standardized Mean Difference (SMD), also die standardisierte Mittelwertsdifferenz. Als gängiger Richtwert gilt: Absolute SMD-Werte unter 0,10 deuten auf eine gute Balance zwischen den Gruppen hin. Für binäre Variablen gibt cobalt hier dagegen unstandardisierte Anteilsdifferenzen aus.
+
+**Exkurs:** Die **standardisierte Mittelwertsdifferenz (Standardized Mean Difference, SMD)** misst Unterschiede in den Ausgangsmerkmalen zwischen Interventions- und Kontrollgruppe, unabhängig von der Maßeinheit der Variablen.
+
+Für kontinuierliche Variablen berechnet sie sich als:
+
+$$
+\mathrm{SMD} =
+\frac{\bar{X}_1 - \bar{X}_0}
+{\sqrt{\frac{s_1^2 + s_0^2}{2}}}
+$$
+
+Dabei bezeichnen $\bar{X}_1$ und $\bar{X}_0$ die Mittelwerte und $s_1$ und $s_0$ die Standardabweichungen der beiden Gruppen.
+
+Für binäre Variablen verwenden wir entsprechend die Gruppenanteile $p_1$ und $p_0$:
+
+$$
+\mathrm{SMD} =
+\frac{p_1 - p_0}
+{\sqrt{\frac{p_1(1-p_1) + p_0(1-p_0)}{2}}}
+$$
+**Hinweis zur Standardisierung**: Die obigen Formeln verwenden die gepoolte Standardabweichung. Bei der Matching-Analyse (ATT) verwenden wir stattdessen die Standardabweichung der ursprünglichen Interventionsgruppe (s.d.denom = "treated"). Bei IPTW (ATE) verwenden wir die gepoolte Standardabweichung (s.d.denom = "pooled"). In beiden Fällen bleibt der Standardisierungsmaßstab beim Vergleich vor und nach der Adjustierung konstant.
+
+**Interpretation:** Eine SMD von 0 bedeutet identische Mittelwerte bzw. Anteile. Häufig gilt ein absoluter Wert von $|\mathrm{SMD}| < 0{,}1$ als Richtwert für eine gute Balance.
+
+Beim Propensity Score Matching vergleichen wir die SMD-Werte vor und nach dem Matching. Kleinere absolute SMD-Werte deuten auf eine bessere Balance der beobachteten Ausgangsmerkmale hin.
+
+Die Balance der berücksichtigten Ausgangsmerkmale auf Basis der SMD-Werte ist insgesamt gut.
+
+**Hinweis:** Für einen konsistenten Vorher-Nachher-Vergleich sollte derselbe Standardisierungsmaßstab verwendet werden, vorzugsweise auf Basis der Ausgangsdaten.
+
+Warum zeigt summary(psm) teilweise andere SMD-Werte als cobalt::bal.tab()? Bei binären Variablen verwendet cobalt standardmäßig häufig die unstandardisierte Anteilsdifferenz. In deinem Ergebnis beträgt diese für Diabetes vor dem Matching beispielsweise 0,118, also 11,8 Prozentpunkte. Die MatchIt-Zusammenfassung zeigt dafür eine standardisierte Differenz von 0,236. Beide Werte beschreiben denselben Gruppenunterschied, allerdings auf unterschiedlichen Skalen. Für eine einheitliche Balancebeurteilung kannst du in cobalt explizit die Standardisierung binärer Variablen aktivieren:
+
+```{r}
+#| label: propensity-score-matching3
+
+# Nur die tatsächlich gematchten Personen übernehmen.
+match_dat <- MatchIt::match.data(psm)
+
+anzahl_teilnehmende <- sum(analyse$teilnahme == 1)
+anzahl_gematcht <- sum(match_dat$teilnahme == 1)
+anzahl_ausgeschlossen <- anzahl_teilnehmende - anzahl_gematcht
+
+match_anzahl <- match_dat |>
+  group_by(gruppe) |>
+  summarise(patienten = n(), .groups = "drop")
+
+kable(match_anzahl, caption = "Personen in der gematchten Stichprobe")
+
+```
+Von `r anzahl_teilnehmende` Programmteilnehmenden konnten
+`r anzahl_gematcht` Personen erfolgreich gematcht werden.
+`r anzahl_ausgeschlossen` Teilnehmende wurden ausgeschlossen.
+
+Hiermit wird der neue Analysedatensatz mit `r anzahl_gematcht` vergleichbaren Paare beziehungsweise `r 2*anzahl_gematcht` Versicherten als neuer Datensatz gespeichert. 
+
+
+## Balance der Ausgangsmerkmale und Love Plot
+
+Der Propensity Score fasst viele Kovariaten in einer Zahl zusammen. Ob Matching die Vergleichbarkeit tatsächlich verbessert, prüfen wir aber an den **standardisierten Mittelwertsdifferenzen (SMD)** aller Ausgangsmerkmale. Der Betrag `|SMD| < 0,10` wird häufig als pragmatischer Richtwert verwendet, ist jedoch keine Beweisregel.
+
+Bei binären Variablen können `summary(psm)` und `cobalt::bal.tab()` abweichende Zahlen ausweisen, weil unstandardisierte Anteilsdifferenzen und standardisierte Differenzen unterschiedliche Skalen verwenden. Mit `binary = "std"` lassen wir auch binäre Variablen standardisieren. Besonders relevant sind NYHA, Voraufnahmen, Diabetes und Vorjahreskosten. Die *nicht* berücksichtigten Variablen `risiko_score` und `einladung_ab_70` bleiben zusätzliche diagnostische Prüfpunkte.
+
+```{r}
+#| label: matching-balance
+
+balance_psm <- cobalt::bal.tab(psm, un = TRUE, binary = "std", s.d.denom = "treated")
+print(balance_psm)
+
+cobalt::love.plot(psm,
+  stats = "mean.diffs", abs = TRUE, binary = "std",
+  thresholds = c(m = 0.10), var.order = "unadjusted") +
+  labs(title = "Kovariatenbalance vor und nach Matching",
+       x = "Absolute standardisierte Mittelwertsdifferenz")
+
+```
+
+**Was zeigt der Love Plot?** Die Grafik zeigt, wie gut das Propensity Score Matching die Ausgangsunterschiede zwischen der Telemonitoring- und der Kontrollgruppe ausgeglichen hat. - Rot (vor Matching): Deutliche Unterschiede, insbesondere bei Erkrankungsschwere (NYHA), vorherigen Hospitalisierungen und Versorgungskosten. - Türkis (nach Matching): Die Unterschiede wurden erheblich reduziert.
+
+Gestrichelte Linie (SMD = 0,1): Üblicher Grenzwert für eine akzeptable Balance. Sämtliche Variablen liegen nach dem Matching darunter.
+
+**Take-home-Message**: Das Matching hat die Vergleichbarkeit der beiden Gruppen hinsichtlich der berücksichtigten Ausgangsmerkmale deutlich verbessert. Damit besteht eine bessere Grundlage zur Schätzung des Programmeffekts. Unbeobachtete Störfaktoren können allerdings weiterhin zu Verzerrungen führen. **Unbeobachtete Confounder** können ohnehin nicht durch eine SMD-Diagnostik ausgeschlossen werden.
+
+## Hospitalisierungsraten und ATT-naher Kontrast
+
+Nach dem Matching vergleichen wir die **annualisierten individuellen HF-Hospitalisierungsraten**. Bei einem einfachen 1:1-Matching ohne Zurücklegen erhalten beide Personen im Paar üblicherweise Gewicht 1. Eine Regression mit `teilnahme` als einzigem Prädiktor liefert somit die Mittelwertsdifferenz in der gematchten Stichprobe.
+
+Da wir 1:1-Matching ohne Zurücklegen verwenden, erhalten alle gematchten Personen das Gewicht 1. Die Gewichte verändern unsere Regressionsschätzung daher nicht. Sie werden dennoch berücksichtigt, weil andere Matching-Verfahren unterschiedliche Beobachtungsgewichte erzeugen können.
+
+```{r}
+#| label: matching-effekt
+
+# Mittelwertdifferenz
+match_mittelwerte <- match_dat |>
+  group_by(gruppe) |>
+  summarise(
+    patienten = n(),
+    mittlere_rate = mean(hf_hosp_rate_post_annual),
+    .groups = "drop"
+  )
+
+kable(match_mittelwerte, digits = 3,
+      caption = "Annualisierte HF-Hospitalisierungen nach Matching")
+
+# Regressionsergebnis entspricht einfachem t-test bzw. Mittelwertdifferent
+modell_match <- fixest::feols(
+  hf_hosp_rate_post_annual ~ teilnahme,
+  data = match_dat,
+  weights = ~weights,
+  vcov = ~subclass
+)
+
+fixest::etable(modell_match, coefstat = "se", digits = 3)
+fixest::etable(modell_match, coefstat = "confint", ci = 0.95, digits = 3)
+fixest::etable(modell_match, coefstat = "pvalue", digits = 3)
+
+```
+
+**Ergebnisinterpretation:** Nach dem Propensity Score Matching weisen Programmteilnehmende durchschnittlich 0,76 statt 0,92 HF-Hospitalisierungen pro 365 Beobachtungstage auf. Der Unterschied ist statistisch signifikant (β = −0,155; robuster SE = 0,053; p = 0,003; 95-%-KI: −0,258 bis −0,051). Die Standardfehler berücksichtigen die Paarstruktur des Matchings.
+
+Beim PSM berücksichtigen wir die Kontrollvariablen bereits bei der Auswahl vergleichbarer Personen. Deshalb ist für die anschließende Effektschätzung eine einfache Regression mit teilnahme als einziger erklärender Variable möglich. Eine zusätzliche multivariable Regression ist nicht zwingend erforderlich, aber als ergänzende Robustheitsprüfung sinnvoll.
+
+```{r}
+#| label: matching-effekt2
+
+# Geschätzte Hospitalisierungsraten für beide Studiengruppen
+# Einstzen in die Regressionsgleichung
+raten <- predict(modell_match, newdata = data.frame(teilnahme = c(0, 1)))
+
+# Relative Differenz zwischen Intervention und Kontrolle
+relative_differenz_match <- 100 * (raten[2] / raten[1] - 1)
+
+sprintf("%.1f %%", relative_differenz_match)
+
+```
+
+Das heißt: Für die gematchten Programmteilnehmenden schätzen wir durchschnittlich 0,155 weniger HF-Hospitalisierungen pro 365 Beobachtungstage gegenüber der hypothetischen Situation ohne Programm.
+
+Die geschätzte Hospitalisierungsrate der Interventionsgruppe liegt somit um rund **`r round(abs(relative_differenz_match), 1)` %** unter derjenigen der gematchten Kontrollgruppe.
+
+**Fazit**: Das Ergebnis spricht für eine positive Wirkung des Telemonitorings bei den 683 gematchten Programmteilnehmenden (ATT für die gematchte Teilgruppe). Eine kausale Interpretation setzt insbesondere voraus, dass keine relevanten unbeobachteten Störfaktoren verbleiben. Der Effekt ist nicht automatisch auf alle 852 Teilnehmenden übertragbar. Weil 169 Teilnehmende nicht gematcht werden konnten, schätzen wir mit unserem bisherigen Modell nicht den ursprünglichen ATT für alle 852 Teilnehmenden, sondern den ATT für die 683 gematchten Teilnehmenden. Unser Ergebnis beträgt: ATT_matched = -0,155
+
+# Inverse Probability of Treatment Weighting: ATE
+
+Im Gegensatz zum PSM können wir mit Hilfe von IPWT einen ATE (Average Treatment Effect) für alle alle anspruchsberechtigten Versicherten der untersuchten Population schätzen und folgende Frage beantworten: **Würde sich das Programm durchschnittlich für die gesamte untersuchte Versichertenpopulation lohnen, wenn wir es allen anbieten beziehungsweise alle daran teilnehmen würden?**
+
+## Wie entstehen die Gewichte?
+
+IPTW erstellt eine gewichtete **Pseudopopulation**. Personen mit Ausgangsmerkmalen, für die ihre tatsächlich beobachtete Teilnahmeentscheidung selten ist, erhalten ein höheres Gewicht. Die Gewichte lauten unstabilisiert `1/PS` für Behandelte und `1/(1 - PS)` für Kontrollen. Wir verwenden **stabilisierte Gewichte**:
+
+-   Teilnahme: `P(Teilnahme) / PS`;
+-   Kontrolle: `P(Kontrolle) / (1 - PS)`.
+
+**Beispiel:** Bei einem Teilnahmeanteil von 42,6 % und einem PS von 0,80 erhält eine teilnehmende Person ungefähr das Gewicht `0,426 / 0,80 = 0,53`; eine vergleichbare nicht teilnehmende Person erhält `0,574 / 0,20 = 2,87`. Letztere zählt stärker, weil Kontrollen mit solchen Ausgangsmerkmalen selten sind.
+
+Kleine PS für Behandelte beziehungsweise PS nahe 1 für Kontrollen können sehr große Gewichte erzeugen. Wir prüfen daher **zuerst die unveränderten (stabile) Gewichte**. PS-Begrenzung und anschließende Winsorisierung werden als **zusätzliche Sensitivitätsanalysen** behandelt.
+
+```{r}
+#| label: iptw-gewichte
+
+p_teilnahme <- mean(analyse$teilnahme)
+
+# Zunächst die unveränderten geschätzten PS verwenden.
+analyse$w_stabil <- ifelse(
+                    analyse$teilnahme == 1, p_teilnahme / analyse$ps,
+                    (1 - p_teilnahme) / (1 - analyse$ps))
+
+
+# Sensitivitätsanalyse A: PS auf 0,01 bis 0,99 begrenzen.
+ps_begrenzt <- pmin(pmax(analyse$ps, 0.01), 0.99)
+
+analyse$w_ps_begrenzt <- ifelse(
+                      analyse$teilnahme == 1, p_teilnahme / ps_begrenzt,  
+                      (1 - p_teilnahme) / (1 - ps_begrenzt))
+
+# Sensitivitätsanalyse B: zusätzlich Gewichte am 1. und 99. Perzentil begrenzen.
+grenzen <- quantile(analyse$w_ps_begrenzt, c(0.01, 0.99))
+
+analyse$w_getrimmt <- pmin(pmax(analyse$w_ps_begrenzt, grenzen[1]), grenzen[2])
+
+
+# Effektive Stichprobengröße nach der Kish-Formel.
+ess <- function(gewichte) {sum(gewichte)^2 / sum(gewichte^2)}
+
+stopifnot(all(is.finite(analyse$w_stabil)))
+stopifnot(all(analyse$w_stabil > 0))
+
+gewichte_vergleich <- data.frame(
+  Gewichtung = c("Stabil (unverändert)", "PS begrenzt auf (0.01-0.99)", "PS begrenzt auf (0.01-0.99) plus winsorisiert (1st-99th quantile)"),
+  Minimum = c(min(analyse$w_stabil), min(analyse$w_ps_begrenzt), min(analyse$w_getrimmt)),
+  Median = c(median(analyse$w_stabil), median(analyse$w_ps_begrenzt), median(analyse$w_getrimmt)),
+  Maximum = c(max(analyse$w_stabil), max(analyse$w_ps_begrenzt), max(analyse$w_getrimmt)),
+  ESS = c(ess(analyse$w_stabil), ess(analyse$w_ps_begrenzt), ess(analyse$w_getrimmt)))
+
+kable(gewichte_vergleich, digits = 2,
+      caption = "Verteilung der IPTW-Gewichte und effektive Stichprobengröße")
+```
+
+Die **Effective Sample Size (ESS)** ist näherungsweise `(Summe der Gewichte)^2 / Summe(quadrierte Gewichte)`. Bei 2.000 Personen und gleichen Gewichten beträgt sie 2.000; bei stark ungleichen Gewichten fällt sie kleiner aus. Die ESS ist eine vereinfachte Diagnose, keine tatsächliche Anzahl unabhängiger Beobachtungen.
+
+**Wichtiger Zielkonflikt:** Begrenzte PS und winsorisierte Gewichte können die Varianz reduzieren, aber auch Verzerrung verursachen oder den wirksam geschätzten Zielparameter verändern. Deshalb vergleichen wir die Ergebnisse mit denen der unveränderten Gewichte.
+
+```{r}
+#| label: iptw-extreme-ps
+
+# Personen mit den kleinsten und größten Propensity Scores untersuchen.
+analyse |>
+  arrange(ps) |>
+  select(person_id, teilnahme, ps) |>
+  head(10) |>
+  kable(digits = 5, caption = "Zehn kleinste Propensity Scores")
+
+analyse |>
+  arrange(desc(ps)) |>
+  select(person_id, teilnahme, ps) |>
+  head(10) |>
+  kable(digits = 5, caption = "Zehn größte Propensity Scores")
+
+```
+
+## Balance vor und nach IPTW
+
+Auch nach IPTW müssen wir die **Ausgangsmerkmale** zwischen den gewichteten Gruppen vergleichen. Hierbei ist nicht der p-Wert der Kovariatenunterschiede entscheidend, sondern die Größe der SMD. Die Hauptdiagnostik bezieht sich auf die **unveränderten stabilisierten Gewichte**; die begrenzten Gewichte können separat geprüft werden.
+
+```{r}
+#| label: iptw-balance
+
+# Balance prüfen
+balance_iptw <- cobalt::bal.tab(ps_formel, data = analyse, weights = analyse$w_stabil,
+                            method = "weighting", estimand = "ATE", un = TRUE, 
+                            binary = "std", s.d.denom = "pooled")
+print(balance_iptw)
+
+cobalt::love.plot(balance_iptw, stats = "mean.diffs",
+                  abs = TRUE,  thresholds = c(m = 0.10),  var.order = "unadjusted") +
+                  labs(title = "Kovariatenbalance vor und nach IPTW",
+                   x = "Absolute standardisierte Mittelwertsdifferenz")
+
+
+# Ändert die Gewichtsbegrenzung die Balance?
+balance_iptw_getrimmt <- cobalt::bal.tab(ps_formel, data = analyse, 
+                        weights = analyse$w_getrimmt, method = "weighting", estimand = "ATE",
+                        un = TRUE, binary = "std", s.d.denom = "pooled")
+print(balance_iptw_getrimmt)
+
+cobalt::love.plot(balance_iptw_getrimmt, stats = "mean.diffs",
+                  abs = TRUE,  thresholds = c(m = 0.10),  var.order = "unadjusted") +
+                  labs(title = "Kovariatenbalance vor und nach IPTW",
+                   x = "Absolute standardisierte Mittelwertsdifferenz")
+
+```
+
+## Gewichtete Effektschätzung: absolute Differenz und IRR
+
+Die **gewichtete OLS-Regression** mit `teilnahme` als einziger Kovariate schätzt eine absolute Differenz der annualisierten individuellen HF-Hospitalisierungsraten. Die **gewichtete Poisson-Regression** modelliert die Anzahl der Aufnahmen und berücksichtigt mit einem Offset die Beobachtungstage, wie in Modul 02.1. Ihr exponentierter Teilnahme-Koeffizient ist ein **relatives Rate Ratio (IRR)**.
+
+```{r}
+#| label: iptw-effekt-OLS
+
+# Hauptmodell: OLS mit stabilen (unbegrenzten) Gewichten
+modell_iptw <- fixest::feols(
+  hf_hosp_rate_post_annual ~ teilnahme,
+  data = analyse,
+  weights = ~w_stabil,
+  vcov = "hetero"
+)
+
+# Sensitivitätsanalyse A: OLS mit begrenzten PS-Gewichten
+modell_iptw_ps_begrenzt <- fixest::feols(
+  hf_hosp_rate_post_annual ~ teilnahme,
+  data = analyse,
+  weights = ~w_ps_begrenzt,
+  vcov = "hetero"
+)
+
+# Sensitivitätsanalyse B: OLS mit begrenzten und winsorisierten PS-Gewichten
+modell_iptw_getrimmt <- fixest::feols(
+  hf_hosp_rate_post_annual ~ teilnahme,
+  data = analyse,
+  weights = ~w_getrimmt,
+  vcov = "hetero"
+)
+
+fixest::etable(modell_iptw, modell_iptw_ps_begrenzt, modell_iptw_getrimmt, digits = 3)
+
+# Die Effekte werden als absolute Differenzen interpretiert.
+iptw_vergleich <- data.frame(
+  Variante = c("Stabilisierte IPTW-Gewichte", "PS begrenzt",
+               "Zusätzlich winsorisiert"),
+  Differenz = c(coef(modell_iptw)[["teilnahme"]],
+               coef(modell_iptw_ps_begrenzt)[["teilnahme"]],
+               coef(modell_iptw_getrimmt)[["teilnahme"]])
+)
+kable(iptw_vergleich, digits = 3,
+      caption = "Absolute Differenz der annualisierten Hospitalisierungen")
+```
+
+**Ergebnis des aktuellen Laufs:** Der absolute Unterschied nach stabilisiertem IPTW beträgt `r round(coef(modell_iptw)[["teilnahme"]], 3)` HF-Hospitalisierungen pro 365 Beobachtungstage. Nach Begrenzung der Propensity Scores beträgt er `r round(coef(modell_iptw_ps_begrenzt)[["teilnahme"]], 3)` und nach zusätzlicher Winsorisierung `r round(coef(modell_iptw_getrimmt)[["teilnahme"]], 3)`. 
+
+```{r}
+#| label: iptw-effekt-poisson
+ 
+# Sensitivitätsanalyse C: Poisson-Modell mit stabilen Gewichten
+modell_iptw_poisson <- fixest::fepois(
+  hf_hosp_2025 ~ teilnahme + offset(log(beobachtungstage_post / 365)),
+  data = analyse, weights = ~w_stabil, vcov = "hetero")
+summary(modell_iptw_poisson)
+
+ki_iptw_poisson <- as.numeric(confint(modell_iptw_poisson)["teilnahme", ])
+
+kable(data.frame(
+  IRR = exp(coef(modell_iptw_poisson)[["teilnahme"]]),
+  KI_unten = exp(ki_iptw_poisson[1]),
+  KI_oben = exp(ki_iptw_poisson[2])
+), digits = 3, caption = "IPTW-gewichtetes Poisson-IRR")
+
+```
+Die gewichtete Poisson-Regression ergibt ein IRR von `r round(exp(coef(modell_iptw_poisson)[["teilnahme"]]), 3)`; dies entspricht einer relativen Änderung der Aufnahmerate um `r round(100 * (exp(coef(modell_iptw_poisson)[["teilnahme"]]) - 1), 1)` %.
+
+**Interpretation:** Die absolute IPTW-Differenz und das IRR beantworten verschiedene Fragen. Das Matching zielt zunächst auf den **ATT der gematchten Teilnehmenden**, die hier verwendeten IPTW-Gewichte dagegen auf den **ATE**. Unterschiede zwischen den Ergebnissen können aus verschiedenen Zielpopulationen, unzureichendem Overlap, verbleibender Kovariatenimbalance oder Modellspezifikation entstehen. Eine gewichtete Schätzung beweist noch keine kausale Wirkung.
+
+Die IPTW-Analysen zeigen konsistent eine geringere HF-Hospitalisierungsrate unter Telemonitoring. Die geschätzte absolute Differenz beträgt −0,136 Hospitalisierungen pro 365 Beobachtungstage und verändert sich nach Begrenzung extremer Gewichte nur geringfügig. Die gewichtete Poisson-Regression ergibt ein IRR von 0,792, entsprechend einer um 20,8 % niedrigeren Hospitalisierungsrate. Beide Schätzungen weisen in dieselbe Richtung, unterscheiden sich jedoch in ihrer relativen Effektstärke. Diese Unterschiede untersuchen wir im nachfolgenden Modellvergleich. Während das lineare Modell eine absolute Differenz schätzt, beschreibt das Poisson-Modell einen relativen Ratenunterschied. Die kausale Interpretation bleibt von den Annahmen des IPTW-Ansatzes abhängig.
+
+Rechnen wir den absoluten Programmeffekt des OLS-Modells in einen relativen Effekt um, können wir beider Schätzergebnisse direkt vergleichen.
+
+```{r}
+# Relative Effektschätzung aus dem gewichteten OLS-Modell
+rate_kontrolle     <- coef(modell_iptw)[["(Intercept)"]]
+absolute_differenz <- coef(modell_iptw)[["teilnahme"]]
+
+relative_differenz_ols <- 100 * absolute_differenz / rate_kontrolle
+
+# Relative Effektschätzung aus dem gewichteten Poisson-Modell
+irr_poisson <- exp(coef(modell_iptw_poisson)[["teilnahme"]])
+relative_differenz_poisson <- 100 * (irr_poisson - 1)
+
+# Beide Ergebnisse (OLS vs Poisson) gegenüberstellen
+vergleich <- data.frame(
+  Modell = c("Gewichtete OLS", "Gewichtete Poisson"),
+  Relative_Differenz_Prozent = c(
+    relative_differenz_ols,
+    relative_differenz_poisson
+  )
+)
+knitr::kable(vergleich, digits = 2)
+
+```
+
+Beide IPTW-gewichteten Regressionsmodelle zeigen eine geringere HF-Hospitalisierungsrate unter Telemonitoring. Die aus dem linearen Modell abgeleitete relative Differenz beträgt −14,95 %, während die Poisson-Regression eine relative Ratenreduktion von 20,78 % ergibt. Die geschätzten Effekte stimmen somit in ihrer Richtung überein, unterscheiden sich aber in ihrer relativen Größenordnung. Einer der Gründe ist, dass die Outcome Variable im OLS Modell eine annualisierte Hospitalisisierungsrate ist, welche mindestens einen Ausreißer beinhaltet. Im Poisson Modell hingegen wird als outcome Variable die absolute Anzahl der HF-Aufnahmen geschätzt und über die individuell verschiedenen Beobachtungszeiten über einen Offset berücksichtigt. Den Poisson Ergebnissen sollte somit höhere Bedeutung zukommen.
+
+Die hier gezeigten heteroskedastizitätsrobusten Standardfehler erfassen **nicht vollständig** die Unsicherheit durch das vorangehende Schätzen des Propensity Scores. Für eine reale Evaluation wären geeignete Inferenzverfahren erforderlich, die alle Schätzschritte berücksichtigen.
+
+# Fazit und methodische Grenzen
+
+PSM und IPTW helfen, **beobachtete** Ausgangsunterschiede zwischen Programmteilnehmenden und Nichtteilnehmenden zu reduzieren. Ob das konkret gelungen ist, muss an den Love Plots, SMD-Werten und Gewichtsdiagnosen beurteilt werden, **nicht** allein daran, dass Regressionskoeffizienten statistisch signifikant sind.
+
+Die Ergebnisse sprechen für einen positiven Effekt des Telemonitorings und stimmen in ihrer Größenordnung mit dem PSM-Ergebnis (−0,15) überein.
+Anders als beim PSM für die gematchten Teilnehmenden zielt IPTW hier auf den ATE für alle 2.000 Versicherten.
+Eine kausale Interpretation setzt insbesondere eine ausreichende Kovariatenbalance, ausreichenden Overlap und das Fehlen relevanter unbeobachteter Störfaktoren voraus.
+
+Die gewichtete absolute Differenz ist unter den Identifikationsannahmen ein geschätzter durchschnittlicher Programmeffekt auf die jährliche HF-Hospitalisierungsrate.
+Wenn PSM und IPTW nicht identisch sind, kann das an unterschiedlichen Zielpopulationen (ATT vs. ATE), Gewichten, geringer Überlappung oder Modellmissspezifikation liegen.
+
