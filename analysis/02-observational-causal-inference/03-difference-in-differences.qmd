@@ -1,0 +1,644 @@
+---
+title: "Beobachtungsstudie: Difference-in-Differences (DiD)"
+subtitle: "Veränderungen 2023–2025, Two-Way Fixed Effects und IPTW · Modul 02.3"
+author: "Stefan Kruse"
+lang: de
+format:
+  html:
+    theme: cosmo
+    toc: true
+    number-sections: true
+    embed-resources: true
+execute:
+  echo: true
+  warning: true
+  message: false
+---
+
+**Datenhinweis:** Sämtliche Personen, Programmteilnahmen und Gesundheitsdaten sind
+**vollständig synthetisch**.
+
+# Forschungsfrage und Grundidee
+
+**Forschungsfrage:** Entwickeln sich die HF-bedingten Hospitalisierungsraten von
+Personen, die ab 2025 am Telemonitoring teilnehmen, nach Programmstart günstiger
+als die Raten der Kontrollgruppe – auch nach Berücksichtigung beobachteter
+Ausgangsunterschiede?
+
+In Modul **01-poisson regression** haben wir Gruppenunterschiede im Jahr 2025 mit Regressionen
+untersucht. In Modul **02-propensity-score-matching & weighting** haben wir die Gruppen mit Propensity Score Matching (PSM) beziehungsweise Inverse Probability of Treatment Weighting (IPTW)
+vergleichbarer gemacht. Jetzt betrachten wir zusätzlich die **Veränderungen
+innerhalb derselben Personen im Zeitverlauf**.
+
+Unsere Daten umfassen **2.000 Versicherte** mit je drei Jahresbeobachtungen:
+
+| Jahr | Bedeutung |
+|:---|:---|
+| 2023 | Erste Vorperiode; Beginn der Beobachtung des Vortrends |
+| 2024 | Zweite Vorperiode; Referenzjahr unmittelbar vor Programmstart |
+| 2025 | Nachperiode; Telemonitoring beginnt am 01.01.2025 |
+
+Die Personen werden in den Jahren 2023 und 2024 als **spätere
+Teilnehmende** oder **Kontrollen** bezeichnet. Vor 2025 erhält noch niemand
+das Programm. Da die Teilnahme nicht randomisiert wurde, untersuchen wir
+zunächst beobachtete Zusammenhänge und erläutern die Bedingungen für eine
+kausale Interpretation.
+
+## Wie funktioniert Difference-in-Differences?
+
+Ein einfacher Vergleich der Gruppen *nach* Programmstart kann durch bereits
+bestehende Unterschiede verzerrt sein. Difference-in-Differences (DiD)
+vergleicht dagegen, **wie stark sich beide Gruppen zwischen Vor- und
+Nachperiode verändern**.
+
+$$
+\widehat{\mathrm{DiD}} =
+(\bar Y_{T,2025}-\bar Y_{T,2024})-
+(\bar Y_{K,2025}-\bar Y_{K,2024})
+$$
+
+Dabei steht $T$ für spätere Programmteilnehmende und $K$ für die
+Kontrollgruppe. $Y$ ist die Zahl der HF-Aufnahmen, annualisiert auf
+365 Beobachtungstage. Ein **negativer DiD-Wert** bedeutet, dass sich die
+Hospitalisierungsrate der Telemonitoring-Gruppe relativ zur Kontrollgruppe
+günstiger entwickelt hat (bzw. mit weniger Hospitalisierungen einherging).
+
+**Zentrale Annahme – parallele unbehandelte Trends:** Ohne das Programm hätten
+sich die Raten beider Gruppen zwischen 2024 und 2025 im Durchschnitt parallel
+entwickelt. Unterschiedliche *Ausgangsniveaus* sind dabei erlaubt. Kritisch
+wären dagegen beispielsweise andere, gleichzeitig einsetzende
+Versorgungsveränderungen, die nur eine Gruppe betreffen. Auch
+**Antizipationseffekte** vor 2025 würden die Interpretation erschweren.
+
+# Benötigte Pakete und Daten
+Pakete bei Bedarf einmalig in der R-Konsole installieren:
+
+```r
+# install.packages(c("dplyr", "ggplot2", "knitr", "fixest", "labelled"))
+```
+
+```{r}
+#| label: pakete-did
+library(dplyr)      # Datenaufbereitung und Gruppentabellen
+library(ggplot2)    # Grafiken
+library(knitr)      # Tabellen
+library(fixest)     # Two-Way-Fixed-Effects-Regression
+library(labelled)   # Variablenlabels
+```
+
+## CSV-Dateien importieren
+
+Wir verwenden dieselben Dateien wie in den beiden vorherigen Modulen:
+
+- `01_versicherte_baseline.csv`: Ausgangsmerkmale und Teilnahme ab 2025.
+- `02_versichertenjahre_panel.csv`: Hospitalisierungen und Beobachtungszeit je Person und Jahr (2023–2025).
+- `03_ereigniszeit_2025.csv`: unter anderem HF-Aufnahmen und Todesfälle im Jahr 2025.
+- `datenwoerterbuch.csv`: gemeinsame deutsche Variablenlabels.
+
+Alle vier Dateien liegen in `data/` im Repository-Hauptverzeichnis. Da dieses
+Skript unter `analysis/02-observational-causal-inference/` liegt, lautet der
+relative Pfad `../../data`.
+
+```{r}
+#| label: daten-einlesen-did
+
+ordner_daten <- "../../data"
+
+datei_baseline <- file.path(ordner_daten, "01_versicherte_baseline.csv")
+datei_panel <- file.path(ordner_daten, "02_versichertenjahre_panel.csv")
+datei_ereigniszeit_2025 <- file.path(ordner_daten, "03_ereigniszeit_2025.csv")
+datei_woerterbuch <- file.path(ordner_daten, "datenwoerterbuch.csv")
+
+# Frühzeitig melden, falls eine Eingabedatei fehlt.
+dateien <- c(datei_baseline, datei_panel,
+             datei_ereigniszeit_2025, datei_woerterbuch)
+if (!all(file.exists(dateien))) {
+  stop("Folgende Dateien fehlen: ",
+       paste(dateien[!file.exists(dateien)], collapse = ", "))
+}
+
+stamm <- read.csv(datei_baseline, stringsAsFactors = FALSE)
+panel <- read.csv(datei_panel, stringsAsFactors = FALSE)
+ereigniszeit <- read.csv(datei_ereigniszeit_2025, stringsAsFactors = FALSE)
+
+cat("Personen im Baseline-Datensatz:", nrow(stamm), "\n")
+cat("Personenjahre im Panel-Datensatz:", nrow(panel), "\n")
+print(table(panel$jahr))
+```
+
+## Analysedatensätze erstellen und prüfen
+
+Für die **DiD-Regression** benötigen wir `panel_analyse`: **eine Zeile je Person
+und Jahr**. Für die Schätzung der IPTW-Gewichte benötigen wir außerdem
+`analyse`: **eine Zeile je Person**, mit den Ausgangsmerkmalen und Ergebnissen
+für 2025. Die Namen entsprechen den vorherigen Modulen.
+
+Im Panel ist `teilnahme` in den Jahren 2023 und 2024 nicht ausgefüllt. Das
+ist beabsichtigt: Die Variable bezeichnet die spätere Gruppenzugehörigkeit.
+Wir übernehmen sie deshalb für alle drei Jahre aus `stamm`.
+
+```{r}
+#| label: daten-zusammenfuehren-did
+
+# Jede Person und jedes Personenjahr darf nur einmal vorkommen.
+stopifnot(!anyDuplicated(stamm$person_id))
+stopifnot(!anyDuplicated(panel[c("person_id", "jahr")]))
+stopifnot(!anyDuplicated(ereigniszeit$person_id))
+stopifnot(nrow(stamm) == 2000)
+stopifnot(nrow(panel) == 3 * nrow(stamm))
+stopifnot(all(panel$jahr %in% c(2023, 2024, 2025)))
+stopifnot(all(panel$beobachtungstage > 0))
+
+# 1. Personenbezogener Analysedatensatz für die Gewichtung.
+panel_2025 <- panel[panel$jahr == 2025, ]
+
+nach <- panel_2025[, c(
+  "person_id", "hf_hosp_rate_365", "gkv_gesamtkosten_eur",
+  "beobachtungstage"
+)]
+names(nach) <- c(
+  "person_id", "hf_hosp_rate_post_annual",
+  "gkv_gesamtkosten_post", "beobachtungstage_post"
+)
+
+nach2 <- ereigniszeit[, c("person_id", "hf_hosp_2025", "tod_2025")]
+
+analyse <- merge(stamm, nach, by = "person_id", all.x = TRUE)
+analyse <- merge(analyse, nach2, by = "person_id", all.x = TRUE)
+analyse$gruppe <- factor(
+  analyse$teilnahme,
+  levels = c(0, 1),
+  labels = c("Kontrolle", "Telemonitoring")
+)
+
+# 2. Panel: Ergebniswerte der Jahre 2023 bis 2025 mit späterer
+#    Gruppenzugehörigkeit verknüpfen.
+panel_analyse <- panel |>
+  select(person_id, jahr, hf_hospitalisierungen, beobachtungstage,
+         hf_hosp_rate_365, gkv_gesamtkosten_eur) |>
+  left_join(stamm |> select(person_id, teilnahme), by = "person_id") |>
+  mutate(
+    gruppe = factor(teilnahme, levels = c(0, 1),
+                    labels = c("Kontrolle", "Telemonitoring")),
+    post = as.integer(jahr == 2025)
+  ) |>
+  arrange(person_id, jahr)
+
+# 3. Datenintegrität prüfen.
+stopifnot(nrow(analyse) == nrow(stamm))
+stopifnot(nrow(panel_analyse) == nrow(panel))
+stopifnot(!anyNA(analyse))
+stopifnot(!anyNA(panel_analyse))
+stopifnot(all(analyse$teilnahme %in% c(0, 1)))
+stopifnot(all(table(panel_analyse$person_id) == 3))
+
+# Aufnahmen und Beobachtungstage müssen zwischen den Dateien übereinstimmen.
+pos_panel <- match(analyse$person_id, panel_2025$person_id)
+pos_ereignis <- match(analyse$person_id, ereigniszeit$person_id)
+stopifnot(!anyNA(pos_panel), !anyNA(pos_ereignis))
+stopifnot(all(analyse$hf_hosp_2025 ==
+              panel_2025$hf_hospitalisierungen[pos_panel]))
+stopifnot(all(analyse$beobachtungstage_post ==
+              panel_2025$beobachtungstage[pos_panel]))
+stopifnot(all(analyse$teilnahme == ereigniszeit$teilnahme[pos_ereignis]))
+
+kable(
+  as.data.frame(table(Gruppe = analyse$gruppe)),
+  caption = "Personen nach Programmteilnahme"
+)
+```
+
+## Einheitliche Variablenlabels
+
+Wie in den vorherigen Modulen übernehmen wir die Variablenlabels
+aus `datenwoerterbuch.csv`. Die Originalnamen im Jahrespanel bleiben für die
+DiD-Analyse erhalten; nur die ausdrücklich umbenannten 2025-Variablen in
+`analyse` erhalten den Zusatz „Nachperiode 2025“.
+
+```{r}
+#| label: variablenlabels-did
+
+woerterbuch <- read.csv(datei_woerterbuch, fileEncoding = "UTF-8")
+woerterbuch <- woerterbuch[!duplicated(woerterbuch$variable), ]
+
+labels <- setNames(woerterbuch$deutsche_bezeichnung,
+                   woerterbuch$variable)
+
+post_variablen <- c(
+  hf_hosp_2025 = "hf_hospitalisierungen",
+  hf_hosp_rate_post_annual = "hf_hosp_rate_365",
+  gkv_gesamtkosten_post = "gkv_gesamtkosten_eur",
+  beobachtungstage_post = "beobachtungstage"
+)
+
+# Erst den Text ergänzen, danach die neuen Variablennamen zuweisen.
+vorhandene_post_variablen <- post_variablen[
+  post_variablen %in% names(labels)
+]
+post_labels <- labels[vorhandene_post_variablen]
+post_labels <- paste0(post_labels, " (Nachperiode 2025)")
+names(post_labels) <- names(vorhandene_post_variablen)
+
+labels_analyse <- c(labels, post_labels)
+labels_analyse <- labels_analyse[
+  names(labels_analyse) %in% names(analyse) &
+    !is.na(labels_analyse) & nzchar(labels_analyse)
+]
+labels_panel <- labels[
+  names(labels) %in% names(panel_analyse) &
+    !is.na(labels) & nzchar(labels)
+]
+
+analyse <- labelled::set_variable_labels(analyse,
+                                        .labels = as.list(labels_analyse))
+panel_analyse <- labelled::set_variable_labels(panel_analyse,
+                                              .labels = as.list(labels_panel))
+labelled::var_label(analyse$gruppe) <- "Studiengruppe"
+labelled::var_label(panel_analyse$gruppe) <- "Studiengruppe (spätere Teilnahme)"
+labelled::var_label(panel_analyse$post) <- "Nachperiode 2025 (0/1)"
+
+labelled::look_for(panel_analyse) |>
+  select(variable, label) |>
+  head(10) |>
+  kable(caption = "Variablenlabels im DiD-Panel (Auszug)")
+
+```
+
+
+# Beobachtete Trends vor und nach Programmstart
+
+Zunächst betrachten wir die Gruppenmittelwerte der **annualisierten 
+Hospitalisierungsrate** in allen drei Jahren. Jede Person trägt zu jedem
+Jahr genau eine Beobachtung bei. Die Zuordnung zu Interventions- und Kontrollgruppe bezieht sich auch in den Vorperioden auf die **spätere** Programmteilnahme ab 2025.
+
+```{r}
+#| label: did-deskriptiv
+
+mittel_verlauf <- panel_analyse |>
+  group_by(jahr, gruppe) |>
+  summarise(
+    patienten = n(),
+    mittlere_rate = mean(hf_hosp_rate_365),
+    .groups = "drop"
+  )
+
+kable(
+  mittel_verlauf,
+  digits = 3,
+  caption = "Mittlere annualisierte HF-Hospitalisierungsrate nach Jahr und Gruppe"
+)
+
+ggplot(mittel_verlauf,
+       aes(x = jahr, y = mittlere_rate, color = gruppe, group = gruppe)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2.5) +
+  geom_vline(xintercept = 2024.5, linetype = "dashed", color = "grey50") +
+  scale_x_continuous(breaks = 2023:2025) +
+  labs(
+    title = "Entwicklung der HF-Hospitalisierungsraten 2023–2025",
+    subtitle = "Gestrichelte Linie: Programmstart zwischen 2024 und 2025",
+    x = "Kalenderjahr",
+    y = "HF-Aufnahmen pro 365 Beobachtungstage",
+    color = "Studiengruppe"
+  ) +
+  theme_minimal()
+
+```
+
+**Interpretation:** Unterschiedliche Raten *vor* Programmstart sind für sich
+genommen kein Problem für DiD, wenn sie auf stabilen Gruppenunterschieden
+beruhen. Entscheidend ist, ob beide Gruppen ohne Telemonitoring 2025 eine
+ähnliche **Veränderung** erfahren hätten. Die beobachteten Verläufe vor
+Programmstart können diese Annahme lediglich plausibilisieren, nicht beweisen.
+
+## Den einfachen DiD-Kontrast selbst berechnen
+
+Wir berechnen zuerst die Veränderungen von **2024 auf 2025** getrennt für beide
+Gruppen. Ihre Differenz entspricht beim vorliegenden balancierten Panel und
+ohne zusätzliche Kovariaten dem 2025-Koeffizienten des nachfolgenden
+ungewichteten Fixed-Effects-Modells.
+
+Zusätzlich zeigt der Vergleich **2023 auf 2024**, ob sich die Gruppen bereits
+in den Vorperioden unterschiedlich entwickelt haben.
+
+```{r}
+#| label: did-mittelwertkontrast
+
+gruppenveraenderungen <- panel_analyse |>
+  group_by(gruppe) |>
+  summarise(
+    N_2023 = sum(jahr == 2023),
+    rate_2023 = mean(hf_hosp_rate_365[jahr == 2023]),
+    N_2024 = sum(jahr == 2024),
+    rate_2024 = mean(hf_hosp_rate_365[jahr == 2024]),
+    N_2025 = sum(jahr == 2025),
+    rate_2025 = mean(hf_hosp_rate_365[jahr == 2025]),
+    .groups = "drop") |>
+  mutate(
+    veraenderung_2023_2024 = rate_2024 - rate_2023,
+    veraenderung_2024_2025 = rate_2025 - rate_2024)
+
+kable(
+  gruppenveraenderungen,
+  digits = 3,
+  caption = "Gruppenmittelwerte und Veränderungen vor und nach Programmstart"
+)
+
+
+
+# Unterschied der Veränderungen von 2024 auf 2025.
+did_einfach <- with(gruppenveraenderungen, 
+ veraenderung_2024_2025[gruppe == "Telemonitoring"] - veraenderung_2024_2025[gruppe == "Kontrolle"])
+
+
+# Deskriptiver Vorperiodenkontrast 2023 auf 2024.
+vortrend_differenz <- with(gruppenveraenderungen,
+  veraenderung_2023_2024[gruppe == "Telemonitoring"] -
+    veraenderung_2023_2024[gruppe == "Kontrolle"])
+
+kable(data.frame(
+    Kennzahl = c("DiD 2024–2025", "Vortrend-Differenz 2023–2024"),
+    Differenz = c(did_einfach, vortrend_differenz)),
+  digits = 3,
+  caption = "Ungewichtete Differenz der Gruppenveränderungen")
+
+```
+
+Die Vortrend-Differenz ist ein **deskriptiver Vergleich**, kein Beweis
+für oder gegen die Paralleltrends-Annahme. Für die statistische Inferenz
+verwenden wir im nächsten Schritt das Regressionsmodell.
+
+
+
+# Difference-in-Differences mit Two-Way Fixed Effects
+
+## Was leistet das Modell?
+
+Das **Two-Way-Fixed-Effects-Modell (TWFE)** berücksichtigt zwei Arten
+zeitlich konstanter beziehungsweise gemeinsamer Einflüsse:
+
+- **Personen-Fixed-Effects** absorbieren alle innerhalb einer Person über
+  die Zeit konstanten Merkmale, auch wenn diese nicht ausdrücklich im
+  Regressionsmodell stehen.
+- **Jahres-Fixed-Effects** absorbieren Entwicklungen, die alle Personen in
+  einem Kalenderjahr gleichermaßen betreffen, beispielsweise einen
+  allgemeinen Versorgungstrend.
+
+Die Interaktionen zwischen `jahr` und `teilnahme` zeigen, wie sich die
+Gruppendifferenz gegenüber **2024** verändert hat. Der Haupteffekt der
+zeitlich konstanten Gruppenzugehörigkeit wird durch die Personen-Fixed-Effects
+aufgenommen; die gemeinsamen Jahreseffekte durch die Jahres-Fixed-Effects.
+
+## Ungewichtete DiD-Regression
+
+$$
+\hat{\beta}_{DiD} =
+(\bar{Y}_{T,2025} - \bar{Y}_{T,2024})
+-
+(\bar{Y}_{K,2025} - \bar{Y}_{K,2024})
+$$
+
+```{r}
+#| label: did-ungewichtet
+
+modell_did <- fixest::feols(
+  hf_hosp_rate_365 ~ i(jahr, teilnahme, ref = 2024) | person_id + jahr,
+  data = panel_analyse, vcov = ~person_id)
+
+fixest::etable(modell_did, coefstat = "confint", ci = 0.95, digits = 3)
+fixest::etable(modell_did, coefstat = "se", digits = 3)
+
+```
+
+**Interpretation der beiden Interaktionsterme:**
+
+- Der Term **2025 × Teilnahme:** gibt den DiD-Schätzer für die Veränderung **2024–2025** an.
+  Ein negativer Koeffizient bedeutet, dass die Interventionsgruppe
+  relativ zur Kontrolle einen günstigeren Verlauf aufweist, da die Vorher-Nachher-Differenz in der Interventionsgruppe größer ist als in der Kontrollgruppe. Die Einheit ist
+  eine HF-Aufnahme pro 365 Beobachtungstage.
+  
+- Der Term **2023 × Teilnahme:** gibt den **Vorperiodenkontrast** relativ zu 2024 wieder. Ein
+  nicht signifikanter Koeffizient zeigt, dass es keinen signifikanten Unterschied in den 2023-2024-Trends beider Gruppen gibt, 
+  ist aber **kein Beweis** für parallele Trends.
+
+Die Standardfehler werden auf **Personenebene** geclustert, weil dieselben
+Versicherten in drei aufeinanderfolgenden Jahren beobachtet werden.
+
+
+# IPTW-gewichtete Difference-in-Differences
+
+## Warum zusätzlich gewichten?
+
+DiD berücksichtigt **zeitlich konstante** individuelle Unterschiede, die
+Gruppen können sich aber auch hinsichtlich gemessener Ausgangsmerkmale
+unterscheiden. Wie in Modul 02 schätzen wir daher die spätere
+Programmteilnahme mit einer logistischen Regression und bilden daraus
+**stabilisierte IPTW-Gewichte**.
+
+Wir verwenden **exakt dieselbe Propensity-Score-Spezifikation** wie in
+Modul 02 und schließen `risiko_score` sowie `einladung_ab_70` bewusst
+nicht in das Hauptmodell ein. Die Gewichte werden **einmal je Person**
+berechnet und gelten für diese Person in allen drei Jahren. Damit wird
+nicht mit Informationen gewichtet, die erst nach Programmstart entstanden.
+
+IPTW ergänzt die Ausgangsangleichung, ersetzt aber die
+**Paralleltrends-Annahme** nicht. Insbesondere bleiben mögliche
+zeitveränderliche, gruppenspezifische Einflüsse relevant.
+
+```{r}
+#| label: did-gewichte
+
+# Dieselben klinischen, demografischen und versorgungsbezogenen
+# Ausgangsmerkmale wie im PSM/IPTW-Modul 02.2.
+ps_formel <- teilnahme ~ alter_2025 + geschlecht + nyha +
+  lvef_prozent + diabetes + niereninsuffizienz + copd +
+  hypertonie + digitalzugang + laendlich + hf_hosp_2023 +
+  hf_hosp_2024 + log1p(gkv_kosten_2024_eur)
+
+ps_modell <- glm(ps_formel, family = binomial(), data = analyse)
+analyse$ps <- predict(ps_modell, type = "response")
+
+stopifnot(all(analyse$ps > 0 & analyse$ps < 1))
+
+# A: Stabilisierte IPTW-Gewichte ohne Begrenzung.
+p_teilnahme <- mean(analyse$teilnahme)
+
+analyse$w_stabil <- ifelse(analyse$teilnahme == 1,
+  p_teilnahme / analyse$ps, (1 - p_teilnahme) / (1 - analyse$ps))
+
+
+# B: Propensity Scores auf 0,01 bis 0,99 begrenzen.
+ps_begrenzt <- pmin(pmax(analyse$ps, 0.01), 0.99)
+
+analyse$w_ps_begrenzt <- ifelse(analyse$teilnahme == 1,
+  p_teilnahme / ps_begrenzt, (1 - p_teilnahme) / (1 - ps_begrenzt))
+
+# C: Die begrenzten Gewichte zusätzlich am 1. und 99. Perzentil
+#    winsorisieren (wie im vorherigen PSM/IPTW-Modul).
+grenzen <- quantile(analyse$w_ps_begrenzt, c(0.01, 0.99))
+
+analyse$w_getrimmt <- pmin(pmax(analyse$w_ps_begrenzt, grenzen[1]),
+  grenzen[2])
+
+stopifnot(all(is.finite(analyse$w_stabil)))
+stopifnot(all(analyse$w_stabil > 0))
+
+# Die Gewichte anhand der person_id für alle drei Jahre zuordnen.
+panel_analyse <- panel_analyse |>
+  left_join(analyse |>
+      select(person_id, w_stabil, w_getrimmt), by = "person_id")
+
+stopifnot(!anyNA(panel_analyse$w_stabil))
+stopifnot(!anyNA(panel_analyse$w_getrimmt))
+stopifnot(all(panel_analyse$w_stabil > 0))
+
+```
+
+Wir vergleichen ein ungewichtetes Modell, ein Modell mit **unveränderten
+stabilisierten IPTW-Gewichten** und eine Sensitivitätsanalyse mit **begrenzten
+und winsorisierten Gewichten**. Die zuletzt genannte Variante entspricht
+der Gewichtsvariante `w_getrimmt` aus Modul 02.
+
+```{r}
+#| label: did-gewichtete-schaetzung
+
+modell_did_stabil <- fixest::feols(
+  hf_hosp_rate_365 ~ i(jahr, teilnahme, ref = 2024) | person_id + jahr,
+  data = panel_analyse, weights = ~w_stabil, vcov = ~person_id)
+
+modell_did_getrimmt <- fixest::feols(
+  hf_hosp_rate_365 ~ i(jahr, teilnahme, ref = 2024) | person_id + jahr,
+  data = panel_analyse, weights = ~w_getrimmt, vcov = ~person_id)
+
+fixest::etable(
+  "Ungewichtet" = modell_did,
+  "IPTW stabil" = modell_did_stabil,
+  "IPTW begrenzt/winsorisiert" = modell_did_getrimmt,
+  coefstat = "confint", ci = 0.95, digits = 3)
+
+```
+
+**Interpretation:** 
+Die DiD-Schätzung lässt sich wie folgt ausdrücken:
+
+Als *Differenz der zeitlichen Veränderungen zwischen den Gruppen*
+$$
+\hat{\beta}_{DiD} =
+(\bar{Y}_{T,2025} - \bar{Y}_{T,2024})
+-
+(\bar{Y}_{K,2025} - \bar{Y}_{K,2024})
+$$
+
+Oder als *Veränderung des Gruppenunterschieds zwischen 2024 und 2025*
+$$
+\hat{\beta}_{DiD} =
+(\bar{Y}_{T,2025} - \bar{Y}_{K,2025})
+-
+(\bar{Y}_{T,2024} - \bar{Y}_{K,2024})
+$$
+
+Dabei steht (T) für die Telemonitoring-Gruppe, (K) für die Kontrollgruppe und (Y) für die durchschnittliche HF-Hospitalisierungsrate.
+Beide Formeln liefern exakt denselben DiD-Schätzwert. 
+Die erste betont den Vergleich zeitlicher Veränderungen, 
+die zweite den Vergleich der Gruppenunterschiede zwischen den Jahren.
+
+**Ergebnis**
+Der Unterschied in der HF-Hospitalisierungsrate zwischen Interventions- und Kontrollgruppe ist im Jahr 2025 um 0,184 Hospitalisierungen pro Patientenjahr geringer als im Referenzjahr 2024. Dieser Unterschied der Gruppenunterschiede entspricht dem geschätzten DiD-Effekt.
+
+Der Interaktionskoeffizient teilnahme × 2025 misst also, um wie viele HF-Hospitalisierungen pro Patientenjahr sich die Veränderung von 2024 auf 2025 zwischen Interventions- und Kontrollgruppe unterscheidet. Ein negativer Koeffizient bedeutet, dass die Hospitalisierungsrate unter Telemonitoring im Vergleich zur Kontrollgruppe stärker zurückgegangen beziehungsweise weniger stark gestiegen ist.
+Oder anders gesagt, dass der Unterschied zwischen der Teilnahme- und Kontrollgruppe im jahr 2025 signifikant geringer als der Unterschied zwischen der Teilnahme- und Kontrollgruppe im Referenzjahr 2024.
+Unter der Paralleltrendannahme und den weiteren Identifikationsannahmen lässt sich dieser Koeffizient als durchschnittlicher Interventionseffekt interpretieren.
+
+Unterschiedliche Schätzwerte entstehen, weil die Gruppen durch IPTW anders
+gewichtet werden. Bei Winsorisierung werden extreme Gewichte begrenzt;
+dadurch verändert sich die Zielgewichtung geringfügig. Die Resultate sind
+nicht mit den relativen Poisson-IRRs aus Modul 02.2 gleichzusetzen.
+
+**Ergebnisse im Vergleich:** Der
+ungewichtete DiD-Kontrast beträgt ungefähr **−0,345** Hospitalisierungen
+pro 365 Beobachtungstage. Mit unveränderten stabilisierten IPTW-Gewichten
+liegt er bei ungefähr **−0,184** und nach zusätzlicher Begrenzung/
+Winsorisierung bei ungefähr **−0,186**. Die Richtung bleibt also gleich;
+die stärkere Veränderung des ungewichteten Effekts zeigt jedoch, dass
+die beobachteten Ausgangsunterschiede für den Vergleich relevant sind.
+
+Die cluster-robusten Standardfehler berücksichtigen die wiederholten
+Beobachtungen derselben Person. Sie bilden die Unsicherheit der zuvor
+geschätzten Propensity Scores jedoch **nicht vollständig** ab. Die
+gewichtete DiD-Inferenz ist deshalb als **approximativ** zu verstehen.
+
+
+# Prüfung von Paralleltrends und Beobachtungsdauer
+
+## Vorperioden 2023–2024
+
+Anhand der Daten für 2023 und 2024 können wir überprüfen, ob sich die Hospitalisierungsraten der Interventions- und Kontrollgruppe bereits vor dem Programmstart unterschiedlich entwickelt haben.
+
+Wenn sich die Veränderungen zwischen beiden Gruppen in diesem Zeitraum nicht wesentlich unterscheiden, spricht dies für die Plausibilität der Paralleltrendannahme. Es beweist jedoch nicht, dass sich die Gruppen ohne Telemonitoring auch im Jahr 2025 parallel entwickelt hätten.
+
+Ein statistisch nicht signifikanter Unterschied zwischen den Vorperiodentrends bedeutet lediglich, dass wir keine ausreichenden Hinweise auf unterschiedliche Entwicklungen finden. Kleinere Unterschiede könnten aufgrund begrenzter statistischer Teststärke unentdeckt bleiben.
+
+Die Ergebnisse der gewichteten und ungewichteten Analyse können sich unterscheiden, weil die IPTW-Gewichtung die Zusammensetzung der Gruppen verändert.
+
+## Unterschiedliche Nachbeobachtungszeiten und Sterblichkeit
+
+Die Outcomevariable `hf_hosp_rate_365` annualisiert die Zahl der
+HF-Hospitalisierungen. Diese gibt die absolute Anzahl der Hospitalisierungen pro Beobachtungsdauer in Tagen wieder, multipliziert mit 365.
+2023 und 2024 werden alle Personen über jeweils 365 Tage beobachtet. 
+2025 können insbesondere Todesfälle die Beobachtungsdauer verkürzen. Eine einzige HF-bedingte Hospitalisierung innerhalb weniger
+Beobachtungstage kann dann eine sehr hohe annualisierte Rate erzeugen.
+
+```{r}
+#| label: did-beobachtungsdauer
+
+# 10 höchste Werte
+analyse |>
+  arrange(desc(hf_hosp_rate_post_annual)) |>
+  select(person_id, beobachtungstage_post, hf_hosp_2025,
+         hf_hosp_rate_post_annual) |>
+  head(10) |>
+  knitr::kable(digits = 2)
+
+# 10 niedrigste Werte
+analyse |>
+  arrange(hf_hosp_rate_post_annual) |>
+  select(person_id, beobachtungstage_post, hf_hosp_2025,
+         hf_hosp_rate_post_annual) |>
+  head(10) |>
+  knitr::kable(digits = 2)
+
+     
+```
+
+**Einordnung:** Unterschiedliche Beobachtungsdauern können den Vergleich
+annualisierter Patientenraten beeinflussen. Tod verhindert weitere
+Hospitalisierungen und ist zugleich ein konkurrierendes Ereignis. Eine
+niedrigere Hospitalisierungsrate bedeutet deshalb nicht automatisch ein
+besseres Überleben. 
+Im Survivalanalysis Modul betrachten wir die
+Zeit bis zur ersten HF-Hospitalisierung und den Umgang mit Tod als
+konkurrierendem Ereignis. Die Zeit, die Patienten **lebend und außerhalb
+des Krankenhauses** verbringen, wäre eine weitere sinnvolle Zielgröße,
+wird hier jedoch nicht gesondert konstruiert.
+
+# Fazit und methodische Grenzen
+
+Die DiD-Analyse ergänzt den Gruppenvergleich, die Regressionsadjustierung
+und PSM/IPTW um eine weitere Perspektive: **Sie vergleicht die
+Veränderungen derselben Personen zwischen den Jahren**. 
+Der Interaktionskoeffizient für das Jahr 2025 im Two-Way-Fixed-Effects-Modell gibt an, 
+**wie stark sich die Hospitalisierungsrate der Interventionsgruppe von 2024 auf 2025 im Vergleich zur Kontrollgruppe verändert hat**.
+
+Bei **einem gemeinsamen Programmstart**, zwei Gruppen und einem
+balancierten Panel ist diese TWFE-Spezifikation eine direkte Umsetzung
+der klassischen DiD-Idee.
+
+Die Ergebnisse können unter **plausiblen unbehandelten Paralleltrends**,
+fehlender Antizipation, einer hinreichend stabilen Gruppenzusammensetzung
+und ohne relevante zeitveränderliche Störfaktoren kausal interpretiert
+werden. Das lässt sich mit zwei beobachteten Vorperioden nicht beweisen.
+Die gewichtete Variante benötigt zusätzlich die Voraussetzungen des
+Propensity-Score-Ansatzes. Alle Schätzungen beruhen ausschließlich auf
+synthetischen Daten.
+
+**Take-home-Message:** Difference-in-Differences (DiD) berücksichtigt zeitlich konstante Unterschiede zwischen Interventions- und Kontrollgruppe. Zeitlich veränderliche Einflussfaktoren, die sich unterschiedlich auf beide Gruppen auswirken, können die Schätzung jedoch weiterhin verzerren.
